@@ -2,7 +2,7 @@ import { config } from '../config/config'
 import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 
-export type Role = 'Admin' | 'Manager' | 'Staff' | 'Customer'
+export type Role = 'Admin' | 'Staff' | 'Driver' | 'Bussiness'
 
 export interface AuthUser {
   accountId: number
@@ -11,13 +11,7 @@ export interface AuthUser {
 }
 
 // Extend Request interface để thêm user property
-declare global {
-  namespace Express {
-    interface Request {
-      user?: AuthUser
-    }
-  }
-}
+
 
 export interface AuthRequest extends Request {
   user?: AuthUser

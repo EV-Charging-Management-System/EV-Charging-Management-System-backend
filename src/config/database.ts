@@ -26,22 +26,17 @@ const dbConfig: sql.config = {
 
 export const connectToDatabase = async (): Promise<void> => {
   try {
-    if (pool) {
-      return
-    }
-
+    if (pool) return
     pool = await new sql.ConnectionPool(dbConfig).connect()
-    console.log('Database connected successfully')
+    console.log('✅ Database connected successfully')
   } catch (error) {
-    console.error('Database connection failed:', error)
+    console.error('❌ Database connection failed:', error)
     throw error
   }
 }
 
 export const getDbPool = async (): Promise<sql.ConnectionPool> => {
-  if (!pool) {
-    await connectToDatabase()
-  }
+  if (!pool) await connectToDatabase()
   return pool!
 }
 
@@ -49,7 +44,7 @@ export const closeDbPool = async (): Promise<void> => {
   if (pool) {
     await pool.close()
     pool = null
-    console.log('Database connection closed')
+    console.log('🛑 Database connection closed')
   }
 }
 
@@ -57,46 +52,35 @@ export const createDefaultAdmin = async (): Promise<void> => {
   try {
     const dbPool = await getDbPool()
 
-    // Check if admin already exists
+    // Kiểm tra admin tồn tại chưa
     const existingAdmin = await dbPool
       .request()
-      .input('email', config.admin.email)
-      .query('SELECT AccountID FROM Accounts WHERE Email = @email')
+      .input('email', sql.VarChar, config.admin.email)
+      .query('SELECT UserId FROM [User] WHERE Mail = @email')
 
     if (existingAdmin.recordset.length > 0) {
-      console.log('Default admin account already exists')
+      console.log('⚠️ Default admin already exists')
       return
     }
 
-    // Hash the default admin password
-    const saltRounds = 12
-    const hashedPassword = await bcrypt.hash(config.admin.password, saltRounds)
+    // Hash password
+    const hashedPassword = await bcrypt.hash(config.admin.password, 12)
 
-    // Create admin account
-    const accountResult = await dbPool
+    // Tạo admin
+    await dbPool
       .request()
-      .input('email', config.admin.email)
-      .input('passwordHash', hashedPassword)
-      .input('roleId', 1).query(`
-        INSERT INTO Accounts (Email, PasswordHash, RoleID, CreatedAt)
-        VALUES (@email, @passwordHash, @roleId, GETDATE())
-      `)
-    const select = await dbPool
-      .request()
-      .input('email', config.admin.email)
-      .query('SELECT * FROM Accounts WHERE Email = @email')
-
-    const accountId = select.recordset[0].AccountID
-
-    // Create admin profile
-    await dbPool.request().input('accountId', accountId).input('fullName', 'System Administrator').query(`
-        INSERT INTO UserProfiles (AccountID, FullName, CreatedAt, UpdatedAt)
-        VALUES (@accountId, @fullName, GETDATE(), GETDATE())
+      .input('email',  config.admin.email)
+      .input('passwordHash',  hashedPassword)
+      .input('roleId',  1)
+      .input('UserName',  'System Administrator')
+      .query(`
+        INSERT INTO [User] (Mail, PassWord, UserName, RoleId)
+        VALUES (@email, @passwordHash, @UserName, @roleId)
       `)
 
-    console.log('Default admin account created successfully')
+    console.log('✅ Default admin created successfully')
   } catch (error) {
-    console.error('Failed to create default admin account:', error)
+    console.error('❌ Failed to create default admin:', error)
     throw error
   }
 }

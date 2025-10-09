@@ -6,10 +6,10 @@ export const config = {
   port: Number.parseInt(process.env.PORT || '5000'),
 
   database: {
-    server: process.env.DB_SERVER || 'localhost',
-    database: process.env.DB_NAME || 'BloodTestServiceDB',
+    server: process.env.DB_SERVER || 'LAPTOP-T1H02SG6',
+    database: process.env.DB_NAME || 'EVCharStation',
     user: process.env.DB_USER || 'sa',
-    password: process.env.DB_PASSWORD || '',
+    password: process.env.DB_PASSWORD || '12345',
     port: Number.parseInt(process.env.DB_PORT || '1433'),
     encrypt: process.env.DB_ENCRYPT === 'true',
     trustServerCertificate: process.env.DB_TRUST_CERT === 'true'
