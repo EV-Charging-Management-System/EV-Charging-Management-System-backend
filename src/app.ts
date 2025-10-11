@@ -5,10 +5,12 @@ import rateLimit from 'express-rate-limit'
 import { config } from './config/config'
 import { connectToDatabase, createDefaultAdmin } from './config/database'
 
+import  authRoutes  from './routes/authRoutes'
 // Import routes
 
 
 const app = express()
+app.use(express.json())
 
 // // Create upload directories if they don't exist
 // const uploadDirs = ['uploads', 'uploads/signatures', 'uploads/documents']
@@ -43,7 +45,7 @@ app.use(
     allowedHeaders: ['Content-Type', 'Authorization']
   })
 )
-
+app.use('/api/auth', authRoutes)
 // Initialize application
 export const initializeApp = async (): Promise<void> => {
   try {

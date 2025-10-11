@@ -5,15 +5,15 @@ import {
   login,
   verifyRefreshToken,
   generateAccessToken,
-  PasswordChange,
-  forgotPassword,
-  resetPassword
+  PasswordChange
+  // forgotPassword,
+  // resetPassword
 } from '../services/authService'
 import { getDbPool } from '../config/database'
 
 export const registerHandler = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { Email, PasswordHash, ConfirmPassword, FullName, PhoneNumber, Address, DateOfBirth, SignatureImage } = req.body
-
+  const { Email, PasswordHash, ConfirmPassword, FullName } = req.body
+ 
   // Kiểm tra các tham số đầu vào
   if (!Email || !PasswordHash || !ConfirmPassword) {
     res.status(400).json({ message: 'Thiếu email hoặc mật khẩu' })
@@ -29,29 +29,12 @@ export const registerHandler = async (req: AuthRequest, res: Response): Promise<
     res.status(400).json({ message: 'Email không hợp lệ' })
     return
   }
-  const phoneRegex = /^0\d{9}$/
-  if (!phoneRegex.test(PhoneNumber)) {
-    res.status(400).json({ message: 'Phone Number không hợp lệ' })
-    return
-  }
-  const pool = await getDbPool()
-  const phoneNumber1 = await pool.request().input('phoneNumber', PhoneNumber).query(`
-    SELECT PhoneNumber FROM UserProfiles WHERE PhoneNumber = @phoneNumber
-  `)
-  if (phoneNumber1.recordset.length > 0) {
-    res.status(409).json({ message: 'Phone Number đã bị trùng' })
-    return
-  }
   try {
     const user = await register(
       Email,
       PasswordHash,
       ConfirmPassword,
-      FullName,
-      PhoneNumber,
-      Address,
-      DateOfBirth,
-      SignatureImage
+      FullName
     )
     if (!user) {
       res.status(409).json({ message: 'Email đã tồn tại' })
@@ -211,7 +194,7 @@ export const logoutHandler = async (req: AuthRequest, res: Response): Promise<vo
     // Revoke the refresh token in the database
     const pool = await getDbPool()
     await pool.request().input('id', id).query(`
-        DELETE FROM RefreshTokens WHERE AccountID = @id
+        DELETE FROM RefreshToken WHERE UserId = @id
       `)
 
     res.json({ success: true, message: 'Đăng xuất thành công' })
@@ -224,63 +207,63 @@ export const logoutHandler = async (req: AuthRequest, res: Response): Promise<vo
   }
 }
 
-export const forgotPasswordHandler = async (req: Request, res: Response): Promise<void> => {
-  const { email } = req.body
+// export const forgotPasswordHandler = async (req: Request, res: Response): Promise<void> => {
+//   const { email } = req.body
 
-  if (!email) {
-    res.status(400).json({ message: 'Email is required' })
-    return
-  }
+//   if (!email) {
+//     res.status(400).json({ message: 'Email is required' })
+//     return
+//   }
 
-  const emailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/
-  if (!emailRegex.test(email)) {
-    res.status(400).json({ message: 'Invalid email format' })
-    return
-  }
+//   const emailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/
+//   if (!emailRegex.test(email)) {
+//     res.status(400).json({ message: 'Invalid email format' })
+//     return
+//   }
 
-  try {
-    const result = await forgotPassword(email)
-    res.json({ success: true, message: result.message })
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      if (error.message === 'Email not found') {
-        res.status(404).json({ message: 'Email not found' })
-      } else {
-        res.status(500).json({ message: error.message })
-      }
-    } else {
-      res.status(500).json({ message: 'An unknown error occurred' })
-    }
-  }
-}
+//   try {
+//     const result = await forgotPassword(email)
+//     res.json({ success: true, message: result.message })
+//   } catch (error: unknown) {
+//     if (error instanceof Error) {
+//       if (error.message === 'Email not found') {
+//         res.status(404).json({ message: 'Email not found' })
+//       } else {
+//         res.status(500).json({ message: error.message })
+//       }
+//     } else {
+//       res.status(500).json({ message: 'An unknown error occurred' })
+//     }
+//   }
+// }
 
-export const resetPasswordHandler = async (req: Request, res: Response): Promise<void> => {
-  const { token, newPassword, confirmPassword } = req.body
+// export const resetPasswordHandler = async (req: Request, res: Response): Promise<void> => {
+//   const { token, newPassword, confirmPassword } = req.body
 
-  if (!token || !newPassword || !confirmPassword) {
-    res.status(400).json({ message: 'Token, new password, and confirm password are required' })
-    return
-  }
+//   if (!token || !newPassword || !confirmPassword) {
+//     res.status(400).json({ message: 'Token, new password, and confirm password are required' })
+//     return
+//   }
 
-  if (newPassword !== confirmPassword) {
-    res.status(400).json({ message: 'Passwords do not match' })
-    return
-  }
+//   if (newPassword !== confirmPassword) {
+//     res.status(400).json({ message: 'Passwords do not match' })
+//     return
+//   }
 
-  try {
-    const result = await resetPassword(token, newPassword)
-    res.json({ success: true, message: result.message })
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      if (error.message === 'Invalid or expired reset token') {
-        res.status(400).json({ message: 'Invalid or expired reset token' })
-      } else if (error.message === 'Password must be between 6 and 12 characters') {
-        res.status(400).json({ message: 'Password must be between 6 and 12 characters' })
-      } else {
-        res.status(500).json({ message: error.message })
-      }
-    } else {
-      res.status(500).json({ message: 'An unknown error occurred' })
-    }
-  }
-}
+//   try {
+//     const result = await resetPassword(token, newPassword)
+//     res.json({ success: true, message: result.message })
+//   } catch (error: unknown) {
+//     if (error instanceof Error) {
+//       if (error.message === 'Invalid or expired reset token') {
+//         res.status(400).json({ message: 'Invalid or expired reset token' })
+//       } else if (error.message === 'Password must be between 6 and 12 characters') {
+//         res.status(400).json({ message: 'Password must be between 6 and 12 characters' })
+//       } else {
+//         res.status(500).json({ message: error.message })
+//       }
+//     } else {
+//       res.status(500).json({ message: 'An unknown error occurred' })
+//     }
+//   }
+// }

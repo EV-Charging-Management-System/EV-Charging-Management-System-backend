@@ -42,7 +42,7 @@ export const config = {
   // },
 
   admin: {
-    email: process.env.DEFAULT_ADMIN_EMAIL || 'admin@bloodlinedna.com',
+    email: process.env.DEFAULT_ADMIN_EMAIL || 'admin@electricvehicle.com',
     password: process.env.DEFAULT_ADMIN_PASSWORD || 'Admin123!'
   },
 
