@@ -1,5 +1,5 @@
 import { AuthRequest } from "@/middlewares/authMiddleware";
-import { asyncHandler } from "@/middlewares/errorMiddleware";
+import { asyncHandler } from "../middlewares/errorMiddleware";
 import { NextFunction,Response } from "express";
 
 class AdminController{

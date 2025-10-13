@@ -14,5 +14,16 @@ class StationService {
         throw new Error('Error fetching station information from the database');
     }   
 }
+getAllStations = async (): Promise<any[]> => {
+    const pool = await getDbPool();
+    try {
+        const result = await pool.request().query(`
+        SELECT * FROM Address
+        `);
+        return result.recordset;
+    } catch (error) {
+        throw new Error('Error fetching all stations from the database');
+    }
+}
 }
 export const stationService = new StationService()
