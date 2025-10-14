@@ -63,16 +63,28 @@ export const createDefaultAdmin = async (): Promise<void> => {
       return
     }
 
+    // Lấy RoleId cho Admin
+    const adminRole = await dbPool
+      .request()
+      .input('roleName', 'Admin')
+      .query('SELECT TOP 1 RoleId FROM [Role] WHERE RoleName = @roleName')
+
+    if (adminRole.recordset.length === 0) {
+      throw new Error("Role 'Admin' không tồn tại. Hãy gọi ensureRolesExist trước.")
+    }
+
+    const adminRoleId = adminRole.recordset[0].RoleId
+
     // Hash password
     const hashedPassword = await bcrypt.hash(config.admin.password, 12)
 
     // Tạo admin
     await dbPool
       .request()
-      .input('email',  config.admin.email)
-      .input('passwordHash',  hashedPassword)
-      .input('roleId',  1)
-      .input('UserName',  'System Administrator')
+      .input('email', config.admin.email)
+      .input('passwordHash', hashedPassword)
+      .input('roleId', adminRoleId)
+      .input('UserName', 'System Administrator')
       .query(`
         INSERT INTO [User] (Mail, PassWord, UserName, RoleId)
         VALUES (@email, @passwordHash, @UserName, @roleId)
@@ -82,5 +94,26 @@ export const createDefaultAdmin = async (): Promise<void> => {
   } catch (error) {
     console.error('❌ Failed to create default admin:', error)
     throw error
+  }
+}
+
+// Đảm bảo các Role cơ bản tồn tại
+export const ensureRolesExist = async (): Promise<void> => {
+  const dbPool = await getDbPool()
+  const requiredRoles = ['Admin', 'Driver']
+
+  for (const roleName of requiredRoles) {
+    const exists = await dbPool
+      .request()
+      .input('roleName', roleName)
+      .query('SELECT TOP 1 RoleId FROM [Role] WHERE RoleName = @roleName')
+
+    if (exists.recordset.length === 0) {
+      await dbPool
+        .request()
+        .input('roleName', roleName)
+        .query('INSERT INTO [Role] (RoleName) VALUES (@roleName)')
+      console.log(`✅ Created missing role: ${roleName}`)
+    }
   }
 }

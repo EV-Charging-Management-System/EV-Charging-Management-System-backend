@@ -8,7 +8,8 @@ class StationController{
       
 GetStatusStation = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
         try {
-            const { StationAddress} = req.body;
+            // Read StationAddress from query (GET) or body (fallback)
+            const StationAddress = (req.query.StationAddress as string) ?? (req.body?.StationAddress as string)
 
             if (!StationAddress) {
                 res.status(400).json({ message: 'Thiếu địa chỉ trạm' });
