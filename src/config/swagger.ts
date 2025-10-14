@@ -14,6 +14,10 @@ export const swaggerOptions: swaggerJSDoc.Options = {
         url: '/api',
         description: 'Base API path',
       },
+      {
+        url: 'http://localhost:3000/api',
+        description: 'Local development server',
+      },
     ],
     tags: [
       { name: 'Auth', description: 'Authentication endpoints' },

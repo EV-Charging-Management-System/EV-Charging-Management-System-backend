@@ -95,7 +95,7 @@ VNPAY_RETURN_URL=http://localhost:3000/payment/vnpay-return
 
 # Server Configuration
 
-PORT=5000
+PORT=3000
 NODE_ENV=development
 \`\`\`
 
@@ -105,7 +105,7 @@ NODE_ENV=development
    npm run dev
    \`\`\`
 
-The server will start on \`http://localhost:5000\`
+The server will start on \`http://localhost:3000\`
 
 ## 📚 API Documentation
 

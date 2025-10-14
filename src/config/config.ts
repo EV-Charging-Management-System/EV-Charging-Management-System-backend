@@ -7,7 +7,7 @@ dotenv.config()
 dotenv.config({ path: path.resolve(__dirname, '../.env') })
 
 export const config = {
-  port: Number.parseInt(process.env.PORT || '5000'),
+  port: Number.parseInt(process.env.PORT || '3000'),
 
   database: {
       server: process.env.DB_SERVER || 'localhost\\SQLEXPRESS',
@@ -36,8 +36,8 @@ export const config = {
     tmnCode: process.env.VNPAY_TMN_CODE || process.env.VNP_TMN_CODE || '',
     hashSecret: process.env.VNPAY_HASH_SECRET || process.env.VNP_HASH_SECRET || '',
     url: process.env.VNPAY_URL || process.env.VNP_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
-    returnUrl: process.env.VNPAY_RETURN_URL || process.env.VNP_RETURN_URL || 'http://localhost:5000/api/payment/vnpay-return',
-    ipnUrl: process.env.VNPAY_IPN_URL || process.env.VNP_IPN_URL || 'http://localhost:5000/api/payment/vnpay-ipn',
+  returnUrl: process.env.VNPAY_RETURN_URL || process.env.VNP_RETURN_URL || 'http://localhost:3000/api/payment/vnpay-return',
+  ipnUrl: process.env.VNPAY_IPN_URL || process.env.VNP_IPN_URL || 'http://localhost:3000/api/payment/vnpay-ipn',
     locale: process.env.VNPAY_LOCALE || 'vn',
     currCode: 'VND'
   },

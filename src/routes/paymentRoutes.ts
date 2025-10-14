@@ -38,51 +38,30 @@ router.post('/create', authenticate, createPayment)
  *   get:
  *     tags: [Payment]
  *     summary: VNPay return URL handler
- *     description: Called by VNPay after user completes payment. For testing, paste the exact query string from the generated paymentUrl. Only include these minimal fields used for signing.
+ *     description: VNPay redirect sau khi thanh toan. De test, nen dán nguyen query ma VNPay tra ve. Neu tu dien, hay nhap cac truong can thiet ben duoi dung voi du lieu VNPay.
  *     parameters:
  *       - in: query
  *         name: vnp_Amount
- *         schema: { type: string, example: '10000000' }
- *       - in: query
- *         name: vnp_BankCode
- *         schema: { type: string, example: 'VNBANK' }
- *       - in: query
- *         name: vnp_Command
- *         schema: { type: string, example: 'pay' }
- *       - in: query
- *         name: vnp_CreateDate
- *         schema: { type: string, example: '20251014123318' }
- *       - in: query
- *         name: vnp_CurrCode
- *         schema: { type: string, example: 'VND' }
- *       - in: query
- *         name: vnp_IpAddr
- *         schema: { type: string, example: '::1' }
- *       - in: query
- *         name: vnp_Locale
- *         schema: { type: string, example: 'vn' }
- *       - in: query
- *         name: vnp_OrderInfo
- *         schema: { type: string, example: 'Nap tien EV' }
- *       - in: query
- *         name: vnp_OrderType
- *         schema: { type: string, example: 'other' }
- *       - in: query
- *         name: vnp_ReturnUrl
- *         schema: { type: string, example: 'http://localhost:5000/api/payment/vnpay-return' }
+ *         schema: { type: string, example: '20000000' }
  *       - in: query
  *         name: vnp_TmnCode
- *         schema: { type: string, example: '' }
+ *         schema: { type: string, example: 'XSRK7UCV' }
  *       - in: query
  *         name: vnp_TxnRef
- *         schema: { type: string, example: '1760419998112' }
+ *         schema: { type: string, example: '1760422963193' }
  *       - in: query
- *         name: vnp_Version
- *         schema: { type: string, example: '2.1.0' }
+ *         name: vnp_ResponseCode
+ *         schema: { type: string, example: '00' }
  *       - in: query
  *         name: vnp_SecureHash
  *         required: true
- *         schema: { type: string, example: 'feae02d1...bf157bef25910' }
+ *         schema: { type: string, example: '7964d574...c3487d8' }
+ *       - in: query
+ *         name: vnp_BankCode
+ *         schema: { type: string, example: 'NCB' }
+ *       - in: query
+ *         name: vnp_OrderInfo
+ *         schema: { type: string, example: 'Nap tien EV' }
  *     responses:
  *       200:
  *         description: Return data
@@ -95,48 +74,30 @@ router.get('/vnpay-return', vnpayReturn)
  *   get:
  *     tags: [Payment]
  *     summary: VNPay IPN listener
- *     description: VNPay server-to-server notification. For testing, you can reuse the same minimal fields as return. In production, VNPay usually includes more fields (e.g., vnp_ResponseCode).
+ *     description: VNPay server to server notification. De test tren local, co the dung y nguyen bo query nhu o return.
  *     parameters:
  *       - in: query
  *         name: vnp_Amount
- *         schema: { type: string, example: '10000000' }
- *       - in: query
- *         name: vnp_BankCode
- *         schema: { type: string, example: 'VNBANK' }
- *       - in: query
- *         name: vnp_Command
- *         schema: { type: string, example: 'pay' }
- *       - in: query
- *         name: vnp_CreateDate
- *         schema: { type: string, example: '20251014123318' }
- *       - in: query
- *         name: vnp_CurrCode
- *         schema: { type: string, example: 'VND' }
- *       - in: query
- *         name: vnp_IpAddr
- *         schema: { type: string, example: '::1' }
- *       - in: query
- *         name: vnp_Locale
- *         schema: { type: string, example: 'vn' }
- *       - in: query
- *         name: vnp_OrderInfo
- *         schema: { type: string, example: 'Nap tien EV' }
- *       - in: query
- *         name: vnp_OrderType
- *         schema: { type: string, example: 'other' }
+ *         schema: { type: string, example: '20000000' }
  *       - in: query
  *         name: vnp_TmnCode
- *         schema: { type: string, example: '' }
+ *         schema: { type: string, example: 'XSRK7UCV' }
  *       - in: query
  *         name: vnp_TxnRef
- *         schema: { type: string, example: '1760419998112' }
+ *         schema: { type: string, example: '1760422963193' }
  *       - in: query
- *         name: vnp_Version
- *         schema: { type: string, example: '2.1.0' }
+ *         name: vnp_ResponseCode
+ *         schema: { type: string, example: '00' }
  *       - in: query
  *         name: vnp_SecureHash
  *         required: true
- *         schema: { type: string, example: 'feae02d1...bf157bef25910' }
+ *         schema: { type: string, example: '7964d574...c3487d8' }
+ *       - in: query
+ *         name: vnp_BankCode
+ *         schema: { type: string, example: 'NCB' }
+ *       - in: query
+ *         name: vnp_OrderInfo
+ *         schema: { type: string, example: 'Nap tien EV' }
  *     responses:
  *       200:
  *         description: IPN response
