@@ -108,7 +108,7 @@ export const PasswordChangeHandler = async (req: AuthRequest, res: Response): Pr
   }
 
   try {
-    await PasswordChange(user.accountId, password, NewPassword)
+    await PasswordChange(user.userId, password, NewPassword)
     res.json({ message: 'Yêu cầu thay đổi mật khẩu đã thành công' })
   } catch (error: unknown) {
     if (error instanceof Error) {
@@ -135,7 +135,7 @@ export const refreshAccessTokenHandler = async (req: Request, res: Response): Pr
 
     // Đảm bảo bạn truyền đầy đủ thông tin trong payload
     const newAccessToken = generateAccessToken({
-      accountId: payload.accountId,
+      userId: payload.userId,
       email: payload.email,
       role: payload.role
     })
@@ -161,14 +161,15 @@ export const getCurrentUserInfo = async (req: AuthRequest, res: Response): Promi
 
     // Get additional user information from database if needed
     const pool = await getDbPool()
-    const result = await pool.request().input('accountId', user.accountId).query(`
-        SELECT a.AccountID as accountId, a.Email as email, r.RoleName as role, 
-               up.FullName as fullName, up.Address as address, up.DateOfBirth as dateOfBirth
-        FROM Accounts a
-        LEFT JOIN UserProfiles up ON a.AccountID = up.AccountID
-        JOIN Roles r ON a.RoleID = r.RoleID
-        WHERE a.AccountID = @accountId
-      `)
+    const result = await pool.request().input('userId', user.userId).query(`
+    SELECT 
+      UserId AS userId,
+      Mail AS email,
+      RoleName AS role,
+      UserName AS fullName
+    FROM [User]
+    WHERE UserId = @userId
+  `)
 
     if (result.recordset.length === 0) {
       res.status(404).json({ message: 'Không tìm thấy thông tin người dùng' })
@@ -189,7 +190,7 @@ export const getCurrentUserInfo = async (req: AuthRequest, res: Response): Promi
 // Add logout handler
 export const logoutHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const id = req.user?.accountId
+    const id = req.user?.userId
 
     // Revoke the refresh token in the database
     const pool = await getDbPool()

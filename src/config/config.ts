@@ -43,7 +43,8 @@ export const config = {
 
   admin: {
     email: process.env.DEFAULT_ADMIN_EMAIL || 'admin@electricvehicle.com',
-    password: process.env.DEFAULT_ADMIN_PASSWORD || 'Admin123!'
+    password: process.env.DEFAULT_ADMIN_PASSWORD || 'Admin123!',
+    roleName: process.env.DEFAULT_ADMIN_ROLE || 'ADMIN'
   },
 
   nodeEnv: process.env.NODE_ENV || 'development'

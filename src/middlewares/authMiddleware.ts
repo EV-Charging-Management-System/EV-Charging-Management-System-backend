@@ -2,12 +2,12 @@ import { config } from '../config/config'
 import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 
-export type Role = 'Admin' | 'Staff' | 'Driver' | 'Bussiness'
+export type Role = 'ADMIN' | 'STAFF' | 'EVDRIVER' | 'BUSINESS'
 
 export interface AuthUser {
-  accountId: number
+  userId: number
   email: string
-  role: Role
+  roleName: Role
 }
 
 // Extend Request interface để thêm user property
@@ -52,12 +52,12 @@ export const authorize = (allowedRoles: string[]) => {
     }
 
     // Convert role to lowercase for case-insensitive comparison
-    const userRole = user.role.toLowerCase()
+    const userRole = user.roleName.toLowerCase()
     const normalizedAllowedRoles = allowedRoles.map((role) => role.toLowerCase())
 
     if (!normalizedAllowedRoles.includes(userRole)) {
       res.status(403).json({
-        message: `Forbidden: User role '${user.role}' is not allowed to access this resource`
+        message: `Forbidden: User role '${user.roleName}' is not allowed to access this resource`
       })
       return
     }
