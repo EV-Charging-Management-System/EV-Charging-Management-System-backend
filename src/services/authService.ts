@@ -5,7 +5,7 @@ import { config } from '../config/config'
 
 // Interface payload token
 export interface Payload {
-  accountId: number
+  userId: number
   email: string
   role: string
 }
@@ -60,16 +60,16 @@ export const register = async (
     .request()
     .input('email', Email)
     .input('password', passwordHash)
-    .input('role_id', role.RoleId)
+    .input('roleName', role.RoleName)
     .input('fullname', FullName)
     .query(`
-      INSERT INTO [User] (Mail, PassWord, RoleId, UserName)
-      VALUES (@email, @password, @role_id, @fullname)
+      INSERT INTO [User] (Mail, PassWord, RoleName, UserName)
+      VALUES (@email, @password, @roleName, @fullname)
     `)
 
   // Lấy lại user vừa tạo
   const newUser = await pool.request().input('email', Email).query(`
-    SELECT UserId, Mail, RoleId, UserName FROM [User] WHERE Mail = @email
+    SELECT UserId, Mail, RoleName, UserName FROM [User] WHERE Mail = @email
   `)
 
   return newUser.recordset[0]
@@ -80,10 +80,9 @@ export const login = async (email: string, password: string) => {
   const pool = await getDbPool()
 
   const result = await pool.request().input('email', email).query(`
-    SELECT u.UserId, u.Mail, u.PassWord, r.RoleName AS role_name
-    FROM [User] u
-    JOIN [Role] r ON u.RoleId = r.RoleId
-    WHERE u.Mail = @email
+    SELECT UserId, Mail, PassWord, RoleName
+    FROM [User]
+    WHERE Mail = @email
   `)
 
   if (result.recordset.length === 0) return null
@@ -94,9 +93,9 @@ export const login = async (email: string, password: string) => {
   if (!valid) return null
 
   const payload: Payload = {
-    accountId: user.UserId,
+    userId: user.UserId,
     email: user.Mail,
-    role: user.role_name
+    role: user.role.RoleName
   }
 
   const accessToken = generateAccessToken(payload)
@@ -121,7 +120,7 @@ export const generateRefreshToken = async (payload: Payload): Promise<string> =>
     await pool
       .request()
       .input('token', refreshToken)
-      .input('userId', payload.accountId) // Lưu đúng userId
+      .input('userId', payload.userId) // Lưu đúng userId
       .input('expiresAt', expiresAt)
       .query(`
         INSERT INTO RefreshToken (Token, UserId, ExpiresAt, Revoked)
@@ -137,7 +136,7 @@ export const generateRefreshToken = async (payload: Payload): Promise<string> =>
 // Xác minh Refresh Token
 export const verifyRefreshToken = async (
   refreshToken: string
-): Promise<{ accountId: number; email: string; role: string } | null> => {
+): Promise<{ userId: number; email: string; role: string } | null> => {
   const pool = await getDbPool()
 
   try {
@@ -154,14 +153,14 @@ export const verifyRefreshToken = async (
 
     const decoded = jwt.verify(refreshToken, config.jwt.secret) as Payload
 
-    const userResult = await pool.request().input('userId', decoded.accountId).query(`
-      SELECT Mail, RoleId FROM [User] WHERE UserId = @userId
+    const userResult = await pool.request().input('userId', decoded.userId).query(`
+      SELECT Mail, RoleName FROM [User] WHERE UserId = @userId
     `)
 
     if (userResult.recordset.length === 0) return null
 
     return {
-      accountId: decoded.accountId,
+      userId: decoded.userId,
       email: decoded.email,
       role: decoded.role
     }

@@ -77,17 +77,25 @@ export const createDefaultAdmin = async (): Promise<void> => {
 
     // Hash password
     const hashedPassword = await bcrypt.hash(config.admin.password, 12)
-
+    // Lấy roleName từ config nếu có, fallback 'ADMIN'
+    const roleName = (config.admin.roleName as string) || 'ADMIN'
     // Tạo admin
     await dbPool
       .request()
+<<<<<<< HEAD
       .input('email', config.admin.email)
       .input('passwordHash', hashedPassword)
       .input('roleId', adminRoleId)
       .input('UserName', 'System Administrator')
+=======
+      .input('email', sql.NVarChar(100), config.admin.email)
+      .input('passwordHash', sql.NVarChar(100), hashedPassword)
+      .input('roleName', sql.NVarChar(50), roleName)
+      .input('UserName', sql.NVarChar(100), 'System Administrator')
+>>>>>>> origin/main
       .query(`
-        INSERT INTO [User] (Mail, PassWord, UserName, RoleId)
-        VALUES (@email, @passwordHash, @UserName, @roleId)
+        INSERT INTO [User] (Mail, PassWord, UserName, RoleName)
+        VALUES (@email, @passwordHash, @UserName, @roleName)
       `)
 
     console.log('✅ Default admin created successfully')
