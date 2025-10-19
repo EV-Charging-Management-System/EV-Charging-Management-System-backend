@@ -9,6 +9,7 @@ import  authRoutes  from './routes/authRoutes'
 import { adminRoutes } from './routes/adminRoutes'
 import { stationRoutes } from './routes/stationRoutes'
 import { paymentRoutes } from './routes/paymentRoutes'
+import { packageRoutes } from './routes/packageRoutes'
 import swaggerUi from 'swagger-ui-express'
 import { swaggerSpec } from './config/swagger'
 // Import routes
@@ -58,6 +59,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/station', stationRoutes)
 app.use('/api/payment', paymentRoutes)
+app.use('/api/packages', packageRoutes)
 // Swagger docs
 app.use(
   '/api-docs',
