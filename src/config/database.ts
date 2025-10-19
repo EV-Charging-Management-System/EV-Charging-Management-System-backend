@@ -90,22 +90,22 @@ export const createDefaultAdmin = async (): Promise<void> => {
 
 
 // Đảm bảo các Role cơ bản tồn tại
-export const ensureRolesExist = async (): Promise<void> => {
-  const dbPool = await getDbPool()
-  const requiredRoles = ['Admin', 'Driver']
+// export const ensureRolesExist = async (): Promise<void> => {
+//   const dbPool = await getDbPool()
+//   const requiredRoles = ['Admin', 'Driver']
 
-  for (const roleName of requiredRoles) {
-    const exists = await dbPool
-      .request()
-      .input('roleName', roleName)
-      .query('SELECT TOP 1 RoleId FROM [Role] WHERE RoleName = @roleName')
+//   for (const roleName of requiredRoles) {
+//     const exists = await dbPool
+//       .request()
+//       .input('roleName', roleName)
+//       .query('SELECT TOP 1 RoleId FROM [Role] WHERE RoleName = @roleName')
 
-    if (exists.recordset.length === 0) {
-      await dbPool
-        .request()
-        .input('roleName', roleName)
-        .query('INSERT INTO [Role] (RoleName) VALUES (@roleName)')
-      console.log(`✅ Created missing role: ${roleName}`)
-    }
-  }
-}
+//     if (exists.recordset.length === 0) {
+//       await dbPool
+//         .request()
+//         .input('roleName', roleName)
+//         .query('INSERT INTO [Role] (RoleName) VALUES (@roleName)')
+//       console.log(`✅ Created missing role: ${roleName}`)
+//     }
+//   }
+// }

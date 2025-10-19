@@ -3,7 +3,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import { config } from './config/config'
-import { connectToDatabase, createDefaultAdmin, ensureRolesExist } from './config/database'
+import { connectToDatabase, createDefaultAdmin } from './config/database'
 
 import  authRoutes  from './routes/authRoutes'
 import { adminRoutes } from './routes/adminRoutes'
@@ -81,7 +81,7 @@ export const initializeApp = async (): Promise<void> => {
     console.log('✅ Database connected successfully')
 
   // Ensure base roles exist
-  await ensureRolesExist()
+  // await ensureRolesExist()
 
     // Create default admin account
     await createDefaultAdmin()
