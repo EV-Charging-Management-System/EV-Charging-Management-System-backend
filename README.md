@@ -4,8 +4,8 @@ A comprehensive DNA testing service backend built with Node.js, Express, and Typ
 
 ## 🚀 Features
 
-- **Authentication & Authorization**: JWT-based authentication with role-based access control
-- **User Management**: Support for multiple user roles (Admin, Manager, Staff, Customer)
+- **Authentication & Authorization**: JWT-based authentication with -based access control
+- **User Management**: Support for multiple user s (Admin, Manager, Staff, Customer)
 - **DNA Test Management**: Complete workflow for DNA test requests and processing
 - **Payment Integration**: VNPay payment gateway integration
 - **Email Services**: Automated email notifications
@@ -125,14 +125,14 @@ The server will start on \`http://localhost:3000\`
 ### Test Request Management
 
 - \`POST /api/test-requests\` - Create new test request
-- \`GET /api/test-requests\` - Get test requests (filtered by role)
+- \`GET /api/test-requests\` - Get test requests (filtered by )
 - \`PUT /api/test-requests/:id/status\` - Update test request status
 - \`GET /api/test-requests/:id/result\` - Get test result
 
 ### Admin Endpoints
 
 - \`GET /api/admin/users\` - Get all users
-- \`PUT /api/admin/users/:id/role\` - Update user role
+- \`PUT /api/admin/users/:id/\` - Update user 
 - \`GET /api/admin/statistics\` - Get system statistics
 
 ### Manager Endpoints
@@ -180,7 +180,7 @@ The API uses JWT tokens for authentication. Include the token in the Authorizati
 Authorization: Bearer <your-jwt-token>
 \`\`\`
 
-### User Roles:
+### User s:
 
 - **Admin**: Full system access
 - **Manager**: Manage test results, blogs, and feedback

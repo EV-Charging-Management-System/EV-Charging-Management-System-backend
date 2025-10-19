@@ -55,7 +55,7 @@ export const createDefaultAdmin = async (): Promise<void> => {
     // Kiểm tra admin tồn tại chưa
     const existingAdmin = await dbPool
       .request()
-      .input('email', sql.VarChar, config.admin.email)
+      .input('email', sql.NVarChar(100), config.admin.email)
       .query('SELECT UserId FROM [User] WHERE Mail = @email')
 
     if (existingAdmin.recordset.length > 0) {
@@ -63,36 +63,19 @@ export const createDefaultAdmin = async (): Promise<void> => {
       return
     }
 
-    // Lấy RoleId cho Admin
-    const adminRole = await dbPool
-      .request()
-      .input('roleName', 'Admin')
-      .query('SELECT TOP 1 RoleId FROM [Role] WHERE RoleName = @roleName')
-
-    if (adminRole.recordset.length === 0) {
-      throw new Error("Role 'Admin' không tồn tại. Hãy gọi ensureRolesExist trước.")
-    }
-
-    const adminRoleId = adminRole.recordset[0].RoleId
-
     // Hash password
     const hashedPassword = await bcrypt.hash(config.admin.password, 12)
-    // Lấy roleName từ config nếu có, fallback 'ADMIN'
+
+    // RoleName dựa trên database ENUM ('ADMIN','STAFF','EVDRIVER','BUSSINESS')
     const roleName = (config.admin.roleName as string) || 'ADMIN'
-    // Tạo admin
+
+    // Insert admin
     await dbPool
       .request()
-<<<<<<< HEAD
-      .input('email', config.admin.email)
-      .input('passwordHash', hashedPassword)
-      .input('roleId', adminRoleId)
-      .input('UserName', 'System Administrator')
-=======
       .input('email', sql.NVarChar(100), config.admin.email)
       .input('passwordHash', sql.NVarChar(100), hashedPassword)
       .input('roleName', sql.NVarChar(50), roleName)
       .input('UserName', sql.NVarChar(100), 'System Administrator')
->>>>>>> origin/main
       .query(`
         INSERT INTO [User] (Mail, PassWord, UserName, RoleName)
         VALUES (@email, @passwordHash, @UserName, @roleName)
@@ -104,6 +87,7 @@ export const createDefaultAdmin = async (): Promise<void> => {
     throw error
   }
 }
+
 
 // Đảm bảo các Role cơ bản tồn tại
 export const ensureRolesExist = async (): Promise<void> => {

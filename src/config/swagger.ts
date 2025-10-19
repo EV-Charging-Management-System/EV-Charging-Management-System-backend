@@ -98,4 +98,5 @@ export const swaggerOptions: swaggerJSDoc.Options = {
   ],
 }
 
+
 export const swaggerSpec = swaggerJSDoc(swaggerOptions)
