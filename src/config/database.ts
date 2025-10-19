@@ -59,7 +59,7 @@ export const createDefaultAdmin = async (): Promise<void> => {
       .query('SELECT UserId FROM [User] WHERE Mail = @email')
 
     if (existingAdmin.recordset.length > 0) {
-      console.log('⚠️ Default admin already exists')
+      console.log('Default admin already exists')
       return
     }
 

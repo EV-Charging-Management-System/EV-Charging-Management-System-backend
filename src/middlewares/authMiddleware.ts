@@ -7,8 +7,9 @@ export type Role = 'ADMIN' | 'STAFF' | 'EVDRIVER' | 'BUSINESS'
 export interface AuthUser {
   userId: number
   email: string
-  roleName: Role
+  role: string
 }
+
 
 // Extend Request interface để thêm user property
 
@@ -52,12 +53,13 @@ export const authorize = (allowedRoles: string[]) => {
     }
 
     // Convert role to lowercase for case-insensitive comparison
-    const userRole = user.roleName.toLowerCase()
+   const userRole = user.role?.toLowerCase()
+
     const normalizedAllowedRoles = allowedRoles.map((role) => role.toLowerCase())
 
     if (!normalizedAllowedRoles.includes(userRole)) {
       res.status(403).json({
-        message: `Forbidden: User role '${user.roleName}' is not allowed to access this resource`
+        message: `Forbidden: User role '${user.role}' is not allowed to access this resource`
       })
       return
     }
