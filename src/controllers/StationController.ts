@@ -8,7 +8,7 @@ class StationController{
       
 GetStatusStation = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
         try {
-            const { StationAddress} = req.body;
+            const { StationAddress } = req.body;
 
             if (!StationAddress) {
                 res.status(400).json({ message: 'Thiếu địa chỉ trạm' });
@@ -21,6 +21,14 @@ GetStatusStation = asyncHandler(async (req: AuthRequest, res: Response, next: Ne
         }
       })
     GetAllStations = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+        try {
+            const stations = await stationService.getAllStations();
+            res.status(200).json({ data: stations, message: 'All stations fetched successfully' });
+        } catch (error) {
+          next(error);
+        }
+        })
+        GetMaybe = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
         try {
             const stations = await stationService.getAllStations();
             res.status(200).json({ data: stations, message: 'All stations fetched successfully' });

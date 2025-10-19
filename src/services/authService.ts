@@ -41,16 +41,9 @@ export const register = async (
     throw new Error('Email đã tồn tại')
   }
 
-  // Lấy RoleId cho "Driver"
-  const roleRes = await pool.request().input('name', 'Driver').query(`
-    SELECT RoleId FROM [Role] WHERE RoleName = @name
-  `)
 
-  if (roleRes.recordset.length === 0) {
-    throw new Error('Role không tồn tại')
-  }
 
-  const role = roleRes.recordset[0]
+
 
   // Mã hóa mật khẩu
   const passwordHash = await bcrypt.hash(Password, 10)
@@ -60,11 +53,11 @@ export const register = async (
     .request()
     .input('email', Email)
     .input('password', passwordHash)
-    .input('roleName', role.RoleName)
+    .input('name', 'EVDRIVER')
     .input('fullname', FullName)
     .query(`
       INSERT INTO [User] (Mail, PassWord, RoleName, UserName)
-      VALUES (@email, @password, @roleName, @fullname)
+      VALUES (@email, @password, @name, @fullname)
     `)
 
   // Lấy lại user vừa tạo
@@ -95,7 +88,7 @@ export const login = async (email: string, password: string) => {
   const payload: Payload = {
     userId: user.UserId,
     email: user.Mail,
-    role: user.role.RoleName
+    role: user.RoleName
   }
 
   const accessToken = generateAccessToken(payload)

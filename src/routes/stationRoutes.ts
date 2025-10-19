@@ -4,6 +4,7 @@ import { stationController } from '../controllers/StationController'
 
 const router = Router()
 
-router.get('/getStationinfor', authenticate, authorize(['Driver']), stationController.GetStatusStation)
-router.get('/getAllSations', authenticate, authorize(['Driver']), stationController.GetAllStations)
+router.get('/getStationinfor', authenticate, authorize(['EVDRIVER']), stationController.GetStatusStation)
+router.get('/getAllSations', authenticate, authorize(['EVDRIVER']), stationController.GetAllStations)
+router.post('/getMaybe', authenticate, authorize(['EVDRIVER']), stationController.GetStatusStation)
 export { router as stationRoutes }
