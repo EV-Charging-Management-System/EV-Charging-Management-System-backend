@@ -25,6 +25,7 @@ export const swaggerOptions: swaggerJSDoc.Options = {
       { name: 'Station', description: 'Station endpoints' },
       { name: 'Payment', description: 'VNPay payment endpoints' },
       { name: 'Package', description: 'Package management endpoints' },
+      { name: 'Subscription', description: 'Subscription management endpoints' },
     ],
     components: {
       securitySchemes: {
