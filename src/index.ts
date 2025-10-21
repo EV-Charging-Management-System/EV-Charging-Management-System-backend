@@ -12,8 +12,6 @@ const startServer = async () => {
       console.log(`🚀 Server running on port ${config.port}`)
       console.log(`📊 Environment: ${config.nodeEnv}`)
       console.log(`🌐 CORS Origin: ${config.cors.origin}`)
-      console.log(`📚 Swagger UI: http://localhost:${config.port}/api-docs`)
-      console.log(`📝 OpenAPI JSON: http://localhost:${config.port}/api-docs.json`)
     })
 
     // Graceful shutdown
