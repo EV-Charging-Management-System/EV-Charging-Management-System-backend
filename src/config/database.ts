@@ -55,7 +55,7 @@ export const createDefaultAdmin = async (): Promise<void> => {
     // Kiểm tra admin tồn tại chưa
     const existingAdmin = await dbPool
       .request()
-      .input('email', sql.VarChar, config.admin.email)
+      .input('email', sql.NVarChar(100), config.admin.email)
       .query('SELECT UserId FROM [User] WHERE Mail = @email')
 
     if (existingAdmin.recordset.length > 0) {
@@ -65,9 +65,11 @@ export const createDefaultAdmin = async (): Promise<void> => {
 
     // Hash password
     const hashedPassword = await bcrypt.hash(config.admin.password, 12)
-    // Lấy roleName từ config nếu có, fallback 'ADMIN'
+
+    // RoleName dựa trên database ENUM ('ADMIN','STAFF','EVDRIVER','BUSSINESS')
     const roleName = (config.admin.roleName as string) || 'ADMIN'
-    // Tạo admin
+
+    // Insert admin
     await dbPool
       .request()
       .input('email', sql.NVarChar(100), config.admin.email)
@@ -85,3 +87,5 @@ export const createDefaultAdmin = async (): Promise<void> => {
     throw error
   }
 }
+
+

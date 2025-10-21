@@ -1,12 +1,16 @@
 import dotenv from 'dotenv'
+import path from 'path'
 
+// Load env from project root by default
 dotenv.config()
+// Also attempt to load from src/.env (in case env file is placed there during development)
+dotenv.config({ path: path.resolve(__dirname, '../.env') })
 
 export const config = {
-  port: Number.parseInt(process.env.PORT || '5000'),
+  port: Number.parseInt(process.env.PORT || '3000'),
 
   database: {
-    server: process.env.DB_SERVER || 'LAPTOP-T1H02SG6',
+      server: process.env.DB_SERVER || 'localhost\\SQLEXPRESS',
     database: process.env.DB_NAME || 'EVCharStation',
     user: process.env.DB_USER || 'sa',
     password: process.env.DB_PASSWORD || '12345',
@@ -25,6 +29,17 @@ export const config = {
   cors: {
     origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
     credentials: true
+  },
+
+  vnpay: {
+    // Accept both VNPAY_* and VNP_* prefixes
+    tmnCode: process.env.VNPAY_TMN_CODE || process.env.VNP_TMN_CODE || '',
+    hashSecret: process.env.VNPAY_HASH_SECRET || process.env.VNP_HASH_SECRET || '',
+    url: process.env.VNPAY_URL || process.env.VNP_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
+  returnUrl: process.env.VNPAY_RETURN_URL || process.env.VNP_RETURN_URL || 'http://localhost:3000/api/payment/vnpay-return',
+  ipnUrl: process.env.VNPAY_IPN_URL || process.env.VNP_IPN_URL || 'http://localhost:3000/api/payment/vnpay-ipn',
+    locale: process.env.VNPAY_LOCALE || 'vn',
+    currCode: 'VND'
   },
 
 
