@@ -1,97 +1,51 @@
-import type { Response } from "express"
-import type { AuthRequest } from "../middlewares/authMiddleware"
-import { companyService } from "../services/companyService"
+import { AuthRequest } from '@/middlewares/authMiddleware'
+import { asyncHandler, createError } from '../middlewares/errorMiddleware'
+import { companyService } from '../services/companyService'
+import { NextFunction, Response } from 'express'
 
-export const getCompanies = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const companies = await companyService.getCompanies()
-    res.json({ success: true, data: companies })
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      res.status(500).json({ message: error.message })
-    } else {
-      res.status(500).json({ message: "An unknown error occurred" })
-    }
-  }
+class CompanyController {
+  getAll = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    const companies = await companyService.getAllCompanies()
+    res.status(200).json({ data: companies, message: 'Companies fetched successfully' })
+  })
+
+  getById = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    const id = Number(req.params.id)
+    if (Number.isNaN(id)) throw createError('Invalid company id', 400, 'VALIDATION_ERROR')
+
+    const company = await companyService.getCompanyById(id)
+    if (!company) throw createError('Company not found', 404, 'NOT_FOUND')
+
+    res.status(200).json({ data: company, message: 'Company fetched successfully' })
+  })
+
+  create = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    const { CompanyName, Address, Mail, Phone } = req.body
+    if (!CompanyName) throw createError('CompanyName is required', 400, 'VALIDATION_ERROR')
+
+    const created = await companyService.createCompany({ CompanyName, Address, Mail, Phone })
+    res.status(201).json({ data: created, message: 'Company created successfully' })
+  })
+
+  update = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    const id = Number(req.params.id)
+    if (Number.isNaN(id)) throw createError('Invalid company id', 400, 'VALIDATION_ERROR')
+
+    const updated = await companyService.updateCompany(id, req.body)
+    if (!updated) throw createError('Company not found', 404, 'NOT_FOUND')
+
+    res.status(200).json({ data: updated, message: 'Company updated successfully' })
+  })
+
+  delete = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    const id = Number(req.params.id)
+    if (Number.isNaN(id)) throw createError('Invalid company id', 400, 'VALIDATION_ERROR')
+
+    const deleted = await companyService.deleteCompany(id)
+    if (!deleted) throw createError('Company not found', 404, 'NOT_FOUND')
+
+    res.status(200).json({ message: 'Company deleted successfully' })
+  })
 }
 
-export const getCompanyById = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params
-    const company = await companyService.getCompanyById(Number(id))
-    if (!company) {
-      res.status(404).json({ message: "Company not found" })
-      return
-    }
-    res.json({ success: true, data: company })
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      res.status(500).json({ message: error.message })
-    } else {
-      res.status(500).json({ message: "An unknown error occurred" })
-    }
-  }
-}
-
-export const getCompanyVehicles = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params
-    const vehicles = await companyService.getCompanyVehicles(Number(id))
-    res.json({ success: true, data: vehicles })
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      res.status(500).json({ message: error.message })
-    } else {
-      res.status(500).json({ message: "An unknown error occurred" })
-    }
-  }
-}
-
-export const addVehicleToCompany = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params
-    const { vehicleName, vehicleType, licensePlate, battery } = req.body
-
-    if (!vehicleName || !vehicleType || !licensePlate || battery === undefined) {
-      res.status(400).json({ message: "Missing required fields" })
-      return
-    }
-
-    const result = await companyService.addVehicleToCompany(Number(id), vehicleName, vehicleType, licensePlate, battery)
-    res.status(201).json({ success: true, data: result })
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      res.status(500).json({ message: error.message })
-    } else {
-      res.status(500).json({ message: "An unknown error occurred" })
-    }
-  }
-}
-
-export const removeVehicleFromCompany = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { id, vehicleId } = req.params
-    await companyService.removeVehicleFromCompany(Number(vehicleId))
-    res.json({ success: true, message: "Vehicle removed successfully" })
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      res.status(500).json({ message: error.message })
-    } else {
-      res.status(500).json({ message: "An unknown error occurred" })
-    }
-  }
-}
-
-export const getCompanyHistory = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params
-    const history = await companyService.getCompanyHistory(Number(id))
-    res.json({ success: true, data: history })
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      res.status(500).json({ message: error.message })
-    } else {
-      res.status(500).json({ message: "An unknown error occurred" })
-    }
-  }
-}
+export const companyController = new CompanyController()

@@ -13,7 +13,7 @@ import { paymentRoutes } from "./routes/paymentRoutes"
 import { membershipRoutes } from "./routes/membershipRoutes"
 import { chargingSessionRoutes } from "./routes/chargingSessionRoutes"
 import { vehicleRoutes } from "./routes/vehicleRoutes"
-import companyRoutes from "./routes/companyRoutes"
+import { companyRoutes } from "./routes/companyRoutes"
 import { staffRoutes } from "./routes/staffRoutes"
 
 const app = express()
