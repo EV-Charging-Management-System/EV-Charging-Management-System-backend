@@ -54,7 +54,10 @@ app.use("/api/station", stationRoutes)
 app.use('/api/companies', companyRoutes)
 app.use('/api/packages', packageRoutes)
 app.use('/api/subscriptions', subscriptionRoutes)
+<<<<<<< HEAD
 app.use('/api/users', userRoutes)
+=======
+>>>>>>> aa708bb (update app)
 app.use("/api/booking", bookingRoutes)
 app.use("/api/payment", paymentRoutes)
 app.use("/api/membership", membershipRoutes)
