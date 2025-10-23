@@ -8,6 +8,9 @@ import { connectToDatabase, createDefaultAdmin } from "./config/database"
 import authRoutes from "./routes/authRoutes"
 import { adminRoutes } from "./routes/adminRoutes"
 import { stationRoutes } from "./routes/stationRoutes"
+import { companyRoutes } from "./routes/companyRoutes"
+import { packageRoutes } from './routes/packageRoutes'
+import { subscriptionRoutes } from './routes/subscriptionRoutes'
 import { bookingRoutes } from "./routes/bookingRoutes"
 import { paymentRoutes } from "./routes/paymentRoutes"
 import { membershipRoutes } from "./routes/membershipRoutes"
@@ -48,6 +51,9 @@ app.use(
 app.use("/api/auth", authRoutes)
 app.use("/api/admin", adminRoutes)
 app.use("/api/station", stationRoutes)
+app.use('/api/companies', companyRoutes)
+app.use('/api/packages', packageRoutes)
+app.use('/api/subscriptions', subscriptionRoutes)
 app.use("/api/booking", bookingRoutes)
 app.use("/api/payment", paymentRoutes)
 app.use("/api/membership", membershipRoutes)
