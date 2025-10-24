@@ -11,6 +11,7 @@ import { stationRoutes } from "./routes/stationRoutes"
 import { companyRoutes } from "./routes/companyRoutes"
 import { packageRoutes } from './routes/packageRoutes'
 import { subscriptionRoutes } from './routes/subscriptionRoutes'
+import { userRoutes } from './routes/userRoutes'
 import { bookingRoutes } from "./routes/bookingRoutes"
 import { paymentRoutes } from "./routes/paymentRoutes"
 import { membershipRoutes } from "./routes/membershipRoutes"
@@ -54,6 +55,7 @@ app.use("/api/station", stationRoutes)
 app.use('/api/companies', companyRoutes)
 app.use('/api/packages', packageRoutes)
 app.use('/api/subscriptions', subscriptionRoutes)
+app.use('/api/users', userRoutes)
 app.use("/api/booking", bookingRoutes)
 app.use("/api/payment", paymentRoutes)
 app.use("/api/membership", membershipRoutes)
