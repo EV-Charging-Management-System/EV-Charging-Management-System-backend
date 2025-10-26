@@ -27,8 +27,24 @@ export const buildVnpUrl = ({ amount, orderInfo, txnRef, ipAddr }: BuildVnpUrlPa
     ipnUrl?: string
   }
 
-  if (!vnpay.tmnCode || !vnpay.hashSecret || !vnpay.url || !vnpay.returnUrl) {
-    throw new Error("VNPAY configuration is incomplete")
+  const missing: string[] = []
+  if (!vnpay.tmnCode) missing.push("VNP_TMN_CODE")
+  if (!vnpay.hashSecret) missing.push("VNP_HASH_SECRET")
+  if (!vnpay.url) missing.push("VNP_URL")
+  if (!vnpay.returnUrl) missing.push("VNP_RETURN_URL")
+
+  if (missing.length) {
+    // Log the current vnpay configuration so it's easy to debug which values are missing.
+    // We redact the secret when logging to avoid leaking sensitive values.
+    console.error("VNPAY config:", {
+      tmnCode: vnpay.tmnCode,
+      hashSecret: vnpay.hashSecret ? "***REDACTED***" : vnpay.hashSecret,
+      url: vnpay.url,
+      returnUrl: vnpay.returnUrl,
+      ipnUrl: vnpay.ipnUrl,
+    })
+
+    throw new Error(`VNPAY configuration is incomplete. Missing: ${missing.join(", ")}`)
   }
 
   const date = new Date()
@@ -52,7 +68,7 @@ export const buildVnpUrl = ({ amount, orderInfo, txnRef, ipAddr }: BuildVnpUrlPa
   const sortedParams = sortObject(vnp_Params)
   const signData = qs.stringify(sortedParams, { encode: false })
 
-  const hmac = crypto.createHmac("sha512", vnpay.hashSecret)
+  const hmac = crypto.createHmac("sha512", vnpay.hashSecret as string)
   const secureHash = hmac.update(signData, "utf-8").digest("hex")
 
   const finalUrl = `${vnpay.url}?${signData}&vnp_SecureHash=${secureHash}`
@@ -90,7 +106,7 @@ export const verifyVnpReturn = (query: Record<string, string>): boolean => {
     const sortedParams = sortObject(queryParams)
     const signData = qs.stringify(sortedParams, { encode: false })
 
-    const hash = crypto.createHmac("sha512", vnpay.hashSecret).update(signData, "utf-8").digest("hex")
+  const hash = crypto.createHmac("sha512", vnpay.hashSecret as string).update(signData, "utf-8").digest("hex")
 
     return hash === secureHash
   } catch {

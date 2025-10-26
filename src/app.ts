@@ -18,7 +18,7 @@ import { membershipRoutes } from "./routes/membershipRoutes"
 import { chargingSessionRoutes } from "./routes/chargingSessionRoutes"
 import { vehicleRoutes } from "./routes/vehicleRoutes"
 import { staffRoutes } from "./routes/staffRoutes"
-
+import { vnpayRoutes } from "./routes/vnpayRoutes"
 const app = express()
 app.use(express.json())
 
@@ -62,7 +62,7 @@ app.use("/api/charging-session", chargingSessionRoutes)
 app.use("/api/vehicle", vehicleRoutes)
 app.use("/api/company", companyRoutes)
 app.use("/api/staff", staffRoutes)
-
+app.use("/api/vnpay", vnpayRoutes)
 // Initialize application
 export const initializeApp = async (): Promise<void> => {
   try {
