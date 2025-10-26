@@ -4,15 +4,13 @@ import { paymentController } from "../controllers/paymentController"
 
 const router = Router()
 
-// Payment routes
-router.post("/process", authenticate, authorize(["EVDRIVER", "BUSINESS_DRIVER"]), paymentController.processPayment)
-router.get("/history", authenticate, authorize(["EVDRIVER", "BUSINESS_DRIVER"]), paymentController.getPaymentHistory)
-router.get("/pending", authenticate, authorize(["EVDRIVER", "BUSINESS_DRIVER"]), paymentController.getPendingPayments)
-router.post(
-  "/pay-pending",
-  authenticate,
-  authorize(["EVDRIVER", "BUSINESS_DRIVER"]),
-  paymentController.payPendingBalance,
-)
+router.post("/", authenticate, authorize(["EVDRIVER", "BUSINESS"]), paymentController.processPayment)
+router.post("/invoice", authenticate, authorize(["EVDRIVER", "BUSINESS"]), paymentController.createInvoice)
+router.get("/history", authenticate, authorize(["EVDRIVER", "BUSINESS"]), paymentController.getPaymentHistory)
+router.get("/invoices", authenticate, authorize(["EVDRIVER", "BUSINESS"]), paymentController.getInvoices)
+router.get("/company/:companyId", authenticate, authorize(["BUSINESS"]), paymentController.getCompanyInvoices)
+router.get("/pending", authenticate, authorize(["EVDRIVER", "BUSINESS"]), paymentController.getPendingPayments)
+router.patch("/:id/pay", authenticate, authorize(["EVDRIVER", "BUSINESS"]), paymentController.payInvoice)
+router.get("/report/:monthYear", authenticate, authorize(["EVDRIVER", "BUSINESS"]), paymentController.getMonthlyReport)
 
 export { router as paymentRoutes }
