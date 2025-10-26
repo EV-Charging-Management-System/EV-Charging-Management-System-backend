@@ -5,7 +5,7 @@ import { NextFunction, Response } from 'express'
 
 class CompanyController {
   getAll = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-    const companies = await companyService.getAllCompanies()
+    const companies = await companyService.getCompanies()
     res.status(200).json({ data: companies, message: 'Companies fetched successfully' })
   })
 
@@ -22,7 +22,6 @@ class CompanyController {
   create = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const { CompanyName, Address, Mail, Phone } = req.body
     if (!CompanyName) throw createError('CompanyName is required', 400, 'VALIDATION_ERROR')
-
     const created = await companyService.createCompany({ CompanyName, Address, Mail, Phone })
     res.status(201).json({ data: created, message: 'Company created successfully' })
   })
@@ -30,7 +29,6 @@ class CompanyController {
   update = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const id = Number(req.params.id)
     if (Number.isNaN(id)) throw createError('Invalid company id', 400, 'VALIDATION_ERROR')
-
     const updated = await companyService.updateCompany(id, req.body)
     if (!updated) throw createError('Company not found', 404, 'NOT_FOUND')
 
@@ -40,7 +38,6 @@ class CompanyController {
   delete = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const id = Number(req.params.id)
     if (Number.isNaN(id)) throw createError('Invalid company id', 400, 'VALIDATION_ERROR')
-
     const deleted = await companyService.deleteCompany(id)
     if (!deleted) throw createError('Company not found', 404, 'NOT_FOUND')
 
