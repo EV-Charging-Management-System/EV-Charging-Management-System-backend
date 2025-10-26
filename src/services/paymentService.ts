@@ -1,6 +1,6 @@
 import { getDbPool } from "../config/database"
 
-interface ProcessPaymentParams {
+export interface ProcessPaymentParams {
   userId: number
   sessionId: number
   invoiceId?: number
