@@ -25,7 +25,7 @@
     "winston": "^3.17.0"
   },
   "scripts": {
-    "dev": "npx nodemon",
+    "dev": "npx nodemon src/server.ts",
     "build": "rimraf ./dist && tsc && tsc-alias && cp -r src/fonts dist/fonts",
     "start": "node dist/index.js",
     "lint": "eslint .",
