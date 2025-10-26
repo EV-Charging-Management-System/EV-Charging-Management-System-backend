@@ -4,25 +4,15 @@ import { membershipController } from "../controllers/membershipController"
 
 const router = Router()
 
-// Membership routes
-router.get("/packages", authenticate, membershipController.getMembershipPackages)
-router.post(
-  "/purchase",
-  authenticate,
-  authorize(["EVDRIVER", "BUSINESS_DRIVER"]),
-  membershipController.purchaseMembership,
-)
-router.get(
-  "/my-membership",
-  authenticate,
-  authorize(["EVDRIVER", "BUSINESS_DRIVER"]),
-  membershipController.getUserMembership,
-)
-router.get(
-  "/check-validity",
-  authenticate,
-  authorize(["EVDRIVER", "BUSINESS_DRIVER"]),
-  membershipController.checkMembershipValidity,
-)
+router.get("/packages", authenticate, membershipController.getPackages)
+router.get("/packages/:id", authenticate, membershipController.getPackageById)
+router.post("/packages", authenticate, authorize(["ADMIN"]), membershipController.createPackage)
+router.patch("/packages/:id", authenticate, authorize(["ADMIN"]), membershipController.updatePackage)
+router.delete("/packages/:id", authenticate, authorize(["ADMIN"]), membershipController.deletePackage)
+router.post("/subscribe", authenticate, authorize(["EVDRIVER", "BUSINESS"]), membershipController.purchaseSubscription)
+router.get("/my", authenticate, authorize(["EVDRIVER", "BUSINESS"]), membershipController.getUserSubscription)
+router.get("/company/:id", authenticate, authorize(["BUSINESS"]), membershipController.getCompanySubscription)
+router.patch("/:id/renew", authenticate, authorize(["EVDRIVER", "BUSINESS"]), membershipController.renewSubscription)
+router.delete("/:id/cancel", authenticate, authorize(["EVDRIVER", "BUSINESS"]), membershipController.cancelSubscription)
 
 export { router as membershipRoutes }

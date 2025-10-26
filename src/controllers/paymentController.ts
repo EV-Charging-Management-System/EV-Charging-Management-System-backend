@@ -1,36 +1,50 @@
-import type { AuthRequest } from "@/middlewares/authMiddleware"
-import { asyncHandler } from "../middlewares/errorMiddleware"
-import { paymentService } from "../services/paymentService"
+import type { AuthRequest } from "../middlewares/authMiddleware"
 import type { NextFunction, Response } from "express"
+import { paymentService } from "../services/paymentService"
 
-class PaymentController {
-  // Process payment
-  processPayment = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+export class PaymentController {
+  async processPayment(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { bookingId, amount, paymentMethod, sessionId } = req.body
+      const { sessionId, amount, paymentMethod, isPostPaid } = req.body
       const userId = req.user?.userId
 
-      if (!userId || !bookingId || !amount || !paymentMethod) {
+      if (!userId || !sessionId || !amount || !paymentMethod) {
         res.status(400).json({ message: "Missing required fields" })
         return
       }
 
       const payment = await paymentService.processPayment({
         userId,
-        bookingId,
+        sessionId,
         amount,
         paymentMethod,
-        sessionId,
+        isPostPaid,
       })
 
-      res.status(200).json({ data: payment, message: "Payment processed successfully" })
+      res.status(201).json({ success: true, data: payment })
     } catch (error) {
       next(error)
     }
-  })
+  }
 
-  // Get payment history
-  getPaymentHistory = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  async createInvoice(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { monthYear, totalAmount,companyId } = req.body
+      const userId = req.user?.userId
+
+      if (!userId || !monthYear || !totalAmount) {
+        res.status(400).json({ message: "Missing required fields" })
+        return
+      }
+
+      const invoice = await paymentService.createInvoice(userId, companyId, monthYear, totalAmount)
+      res.status(201).json({ success: true, data: invoice })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  async getPaymentHistory(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = req.user?.userId
       if (!userId) {
@@ -39,14 +53,38 @@ class PaymentController {
       }
 
       const payments = await paymentService.getPaymentHistory(userId)
-      res.status(200).json({ data: payments, message: "Payment history fetched successfully" })
+      res.status(200).json({ success: true, data: payments })
     } catch (error) {
       next(error)
     }
-  })
+  }
 
-  // Get pending payments (trả sau)
-  getPendingPayments = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  async getInvoices(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.user?.userId
+      if (!userId) {
+        res.status(401).json({ message: "Unauthorized" })
+        return
+      }
+
+      const invoices = await paymentService.getInvoices(userId)
+      res.status(200).json({ success: true, data: invoices })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  async getCompanyInvoices(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { companyId } = req.params
+      const invoices = await paymentService.getCompanyInvoices(Number(companyId))
+      res.status(200).json({ success: true, data: invoices })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  async getPendingPayments(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = req.user?.userId
       if (!userId) {
@@ -55,29 +93,45 @@ class PaymentController {
       }
 
       const payments = await paymentService.getPendingPayments(userId)
-      res.status(200).json({ data: payments, message: "Pending payments fetched successfully" })
+      res.status(200).json({ success: true, data: payments })
     } catch (error) {
       next(error)
     }
-  })
+  }
 
-  // Pay pending balance
-  payPendingBalance = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  async payInvoice(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { amount, paymentMethod } = req.body
-      const userId = req.user?.userId
+      const { id } = req.params
+      const { paymentMethod } = req.body
 
-      if (!userId || !amount || !paymentMethod) {
-        res.status(400).json({ message: "Missing required fields" })
+      if (!paymentMethod) {
+        res.status(400).json({ message: "Payment method is required" })
         return
       }
 
-      const result = await paymentService.payPendingBalance(userId, amount, paymentMethod)
-      res.status(200).json({ data: result, message: "Pending balance paid successfully" })
+      await paymentService.payInvoice(Number(id), paymentMethod)
+      res.json({ success: true, message: "Invoice paid successfully" })
     } catch (error) {
       next(error)
     }
-  })
+  }
+
+  async getMonthlyReport(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.user?.userId
+      const { monthYear } = req.query
+
+      if (!userId || !monthYear) {
+        res.status(400).json({ message: "Missing required parameters" })
+        return
+      }
+
+      const report = await paymentService.getMonthlyReport(userId, monthYear as string)
+      res.status(200).json({ success: true, data: report })
+    } catch (error) {
+      next(error)
+    }
+  }
 }
 
 export const paymentController = new PaymentController()

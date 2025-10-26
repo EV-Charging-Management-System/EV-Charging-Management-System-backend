@@ -1,45 +1,65 @@
-import { NVarChar, DateTime, Decimal, Int } from "mssql"
 import { getDbPool } from "../config/database"
 
 interface ProcessPaymentParams {
   userId: number
-  bookingId: number
+  sessionId: number
+  invoiceId?: number
   amount: number
-  paymentMethod: "CASH" | "TRANSFER" | "QR" | "MEMBERSHIP"
-  sessionId?: string
+  paymentMethod: "CASH" | "QR" | "MEMBERSHIP" | "POSTPAID"
+  isPostPaid?: boolean
 }
 
-class PaymentService {
+export class PaymentService {
   async processPayment(params: ProcessPaymentParams): Promise<any> {
     const pool = await getDbPool()
     try {
-      const paymentId = `PAY_${Date.now()}`
-      const status = "COMPLETED"
+      const paymentTime = new Date()
+      const paymentStatus = params.isPostPaid ? "Pending" : "Paid"
+
+      const result = await pool
+        .request()
+        .input("UserId", params.userId)
+        .input("SessionId", params.sessionId)
+        .input("InvoiceId", params.invoiceId || null)
+        .input("TotalAmount", params.amount)
+        .input("PaymentTime", paymentTime)
+        .input("PaymentStatus", paymentStatus)
+        .input("PaymentType", params.paymentMethod)
+        .input("IsPostPaid", params.isPostPaid ? 1 : 0)
+        .query(`
+          INSERT INTO [Payment] (UserId, SessionId, InvoiceId, TotalAmount, PaymentTime, PaymentStatus, PaymentType, IsPostPaid)
+          OUTPUT INSERTED.PaymentId
+          VALUES (@UserId, @SessionId, @InvoiceId, @TotalAmount, @PaymentTime, @PaymentStatus, @PaymentType, @IsPostPaid)
+        `)
+
+      return { paymentId: result.recordset[0].PaymentId, status: paymentStatus }
+    } catch (error) {
+      throw new Error("Error processing payment: " + error)
+    }
+  }
+
+  async createInvoice(userId: number, companyId: number | null, monthYear: string, totalAmount: number): Promise<any> {
+    const pool = await getDbPool()
+    try {
       const createdAt = new Date()
 
       const result = await pool
         .request()
-        .input("PaymentId", NVarChar, paymentId)
-        .input("UserId", Int, params.userId)
-        .input("BookingId", Int, params.bookingId)
-        .input("Amount", Decimal, params.amount)
-        .input("PaymentMethod", NVarChar, params.paymentMethod)
-        .input("Status", NVarChar, status)
-        .input("CreatedAt", DateTime, createdAt)
+        .input("UserId", userId)
+        .input("CompanyId", companyId || null)
+        .input("MonthYear", monthYear)
+        .input("TotalAmount", totalAmount)
+        .input("PaidStatus", "Pending")
+        .input("CreatedAt", createdAt)
         .query(`
-          INSERT INTO [Payment] (PaymentId, UserId, BookingId, Amount, PaymentMethod, Status, CreatedAt)
-          VALUES (@PaymentId, @UserId, @BookingId, @Amount, @PaymentMethod, @Status, @CreatedAt)
+          INSERT INTO [Invoice] (UserId, CompanyId, MonthYear, TotalAmount, PaidStatus, CreatedAt)
+          OUTPUT INSERTED.InvoiceId
+          VALUES (@UserId, @CompanyId, @MonthYear, @TotalAmount, @PaidStatus, @CreatedAt)
         `)
 
-      // Update booking status
-      await pool
-        .request()
-        .input("BookingId", NVarChar, params.bookingId)
-        .query(`UPDATE [Booking] SET Status = 'CONFIRMED' WHERE BookingId = @BookingId`)
-
-      return { paymentId, status, message: "Payment successful" }
+      return result.recordset[0]
     } catch (error) {
-      throw new Error("Error processing payment")
+      throw new Error("Error creating invoice: " + error)
     }
   }
 
@@ -48,9 +68,9 @@ class PaymentService {
     try {
       const result = await pool
         .request()
-        .input("UserId", Int, userId)
+        .input("UserId", userId)
         .query(`
-          SELECT * FROM [Payment] WHERE UserId = @UserId ORDER BY CreatedAt DESC
+          SELECT * FROM [Payment] WHERE UserId = @UserId ORDER BY PaymentTime DESC
         `)
       return result.recordset
     } catch (error) {
@@ -58,43 +78,84 @@ class PaymentService {
     }
   }
 
-  async getPendingPayments(userId: number): Promise<any> {
+  async getInvoices(userId: number): Promise<any[]> {
     const pool = await getDbPool()
     try {
       const result = await pool
         .request()
-        .input("UserId", Int, userId)
+        .input("UserId", userId)
         .query(`
-          SELECT SUM(Amount) as TotalPending FROM [Payment] 
-          WHERE UserId = @UserId AND Status = 'PENDING'
+          SELECT * FROM [Invoice] WHERE UserId = @UserId ORDER BY CreatedAt DESC
         `)
-      return result.recordset[0]
+      return result.recordset
+    } catch (error) {
+      throw new Error("Error fetching invoices")
+    }
+  }
+
+  async getCompanyInvoices(companyId: number): Promise<any[]> {
+    const pool = await getDbPool()
+    try {
+      const result = await pool
+        .request()
+        .input("CompanyId", companyId)
+        .query(`
+          SELECT * FROM [Invoice] WHERE CompanyId = @CompanyId ORDER BY CreatedAt DESC
+        `)
+      return result.recordset
+    } catch (error) {
+      throw new Error("Error fetching company invoices")
+    }
+  }
+
+  async getPendingPayments(userId: number): Promise<any[]> {
+    const pool = await getDbPool()
+    try {
+      const result = await pool
+        .request()
+        .input("UserId", userId)
+        .query(`
+          SELECT * FROM [Payment] WHERE UserId = @UserId AND PaymentStatus = 'Pending'
+        `)
+      return result.recordset
     } catch (error) {
       throw new Error("Error fetching pending payments")
     }
   }
 
-  async payPendingBalance(userId: number, amount: number, paymentMethod: string): Promise<any> {
+  async payInvoice(invoiceId: number, paymentMethod: string): Promise<void> {
     const pool = await getDbPool()
     try {
-      const paymentId = `PAY_${Date.now()}`
-      const createdAt = new Date()
-
       await pool
         .request()
-        .input("PaymentId", NVarChar, paymentId)
-        .input("UserId", Int, userId)
-        .input("Amount", Decimal, amount)
-        .input("PaymentMethod", NVarChar, paymentMethod)
-        .input("CreatedAt", DateTime, createdAt)
+        .input("InvoiceId", invoiceId)
+        .input("PaymentMethod", paymentMethod)
         .query(`
-          INSERT INTO [Payment] (PaymentId, UserId, Amount, PaymentMethod, Status, CreatedAt)
-          VALUES (@PaymentId, @UserId, @Amount, @PaymentMethod, 'COMPLETED', @CreatedAt)
+          UPDATE [Invoice] SET PaidStatus = 'Paid' WHERE InvoiceId = @InvoiceId
         `)
-
-      return { message: "Pending balance paid successfully" }
     } catch (error) {
-      throw new Error("Error paying pending balance")
+      throw new Error("Error paying invoice")
+    }
+  }
+
+  async getMonthlyReport(userId: number, monthYear: string): Promise<any> {
+    const pool = await getDbPool()
+    try {
+      const result = await pool
+        .request()
+        .input("UserId", userId)
+        .input("MonthYear", monthYear)
+        .query(`
+          SELECT 
+            SUM(TotalAmount) as TotalSpent,
+            COUNT(*) as SessionCount,
+            AVG(TotalAmount) as AvgSessionCost
+          FROM [Payment]
+          WHERE UserId = @UserId AND CONVERT(VARCHAR(7), PaymentTime, 121) = @MonthYear
+        `)
+      return result.recordset[0]
+    } catch (error) {
+      throw new Error("Error fetching monthly report")
     }
   }
 }

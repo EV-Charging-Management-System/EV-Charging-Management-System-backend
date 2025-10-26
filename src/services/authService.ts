@@ -1,7 +1,7 @@
-import bcrypt from 'bcrypt'
-import { getDbPool } from '../config/database'
-import jwt from 'jsonwebtoken'
-import { config } from '../config/config'
+import bcrypt from "bcrypt"
+import { getDbPool } from "../config/database"
+import jwt from "jsonwebtoken"
+import { config } from "../config/config"
 
 // Interface payload token
 export interface Payload {
@@ -11,39 +11,33 @@ export interface Payload {
 }
 
 // Thời gian hết hạn token
-const ACCESS_TOKEN_EXPIRES_IN = '1m'
+const ACCESS_TOKEN_EXPIRES_IN = "60m"
 const REFRESH_TOKEN_EXPIRES_IN = 7 * 24 * 60 * 60 * 1000 // 7 ngày (ms)
 
 // Hàm đăng ký user
-export const register = async (
-  Email: string,
-  Password: string,
-  ConfirmPassword: string,
-  FullName: string
-) => {
+export const register = async (Email: string, Password: string, ConfirmPassword: string, FullName: string) => {
   const passwordRegex = /^.{6,12}$/
   if (!passwordRegex.test(Password)) {
-    throw new Error('Mật khẩu phải từ 6 đến 12 ký tự')
+    throw new Error("Mật khẩu phải từ 6 đến 12 ký tự")
   }
 
   if (Password !== ConfirmPassword) {
-    throw new Error('Mật khẩu không trùng khớp')
+    throw new Error("Mật khẩu không trùng khớp")
   }
 
   const pool = await getDbPool()
 
   // Kiểm tra email tồn tại
-  const existing = await pool.request().input('email', Email).query(`
+  const existing = await pool
+    .request()
+    .input("email", Email)
+    .query(`
     SELECT Mail FROM [User] WHERE Mail = @email
   `)
 
   if (existing.recordset.length > 0) {
-    throw new Error('Email đã tồn tại')
+    throw new Error("Email đã tồn tại")
   }
-
-
-
-
 
   // Mã hóa mật khẩu
   const passwordHash = await bcrypt.hash(Password, 10)
@@ -51,18 +45,93 @@ export const register = async (
   // Thêm user mới
   await pool
     .request()
-    .input('email', Email)
-    .input('password', passwordHash)
-    .input('name', 'EVDRIVER')
-    .input('fullname', FullName)
+    .input("email", Email)
+    .input("password", passwordHash)
+    .input("name", "EVDRIVER")
+    .input("fullname", FullName)
     .query(`
       INSERT INTO [User] (Mail, PassWord, RoleName, UserName)
       VALUES (@email, @password, @name, @fullname)
     `)
 
   // Lấy lại user vừa tạo
-  const newUser = await pool.request().input('email', Email).query(`
+  const newUser = await pool
+    .request()
+    .input("email", Email)
+    .query(`
     SELECT UserId, Mail, RoleName, UserName FROM [User] WHERE Mail = @email
+  `)
+
+  return newUser.recordset[0]
+}
+
+export const registerBusiness = async (
+  Email: string,
+  Password: string,
+  ConfirmPassword: string,
+  CompanyName: string,
+  Address: string,
+  Phone: string,
+) => {
+  const passwordRegex = /^.{6,12}$/
+  if (!passwordRegex.test(Password)) {
+    throw new Error("Mật khẩu phải từ 6 đến 12 ký tự")
+  }
+
+  if (Password !== ConfirmPassword) {
+    throw new Error("Mật khẩu không trùng khớp")
+  }
+
+  const pool = await getDbPool()
+
+  // Kiểm tra email tồn tại
+  const existing = await pool
+    .request()
+    .input("email", Email)
+    .query(`
+    SELECT Mail FROM [User] WHERE Mail = @email
+  `)
+
+  if (existing.recordset.length > 0) {
+    throw new Error("Email đã tồn tại")
+  }
+
+  // Mã hóa mật khẩu
+  const passwordHash = await bcrypt.hash(Password, 10)
+
+  // Tạo company
+  const companyResult = await pool
+    .request()
+    .input("companyName", CompanyName)
+    .input("address", Address)
+    .input("phone", Phone)
+    .input("mail", Email)
+    .query(`
+      INSERT INTO [Company] (CompanyName, Address, Phone, Mail)
+      OUTPUT INSERTED.CompanyId
+      VALUES (@companyName, @address, @phone, @mail)
+    `)
+
+  const companyId = companyResult.recordset[0].CompanyId
+
+  // Tạo user với role BUSINESS
+  await pool
+    .request()
+    .input("email", Email)
+    .input("password", passwordHash)
+    .input("companyId", companyId)
+    .input("role", "BUSINESS")
+    .input("fullname", CompanyName)
+    .query(`
+      INSERT INTO [User] (Mail, PassWord, RoleName, UserName, CompanyId)
+      VALUES (@email, @password, @role, @fullname, @companyId)
+    `)
+
+  const newUser = await pool
+    .request()
+    .input("email", Email)
+    .query(`
+    SELECT UserId, Mail, RoleName, UserName, CompanyId FROM [User] WHERE Mail = @email
   `)
 
   return newUser.recordset[0]
@@ -72,7 +141,10 @@ export const register = async (
 export const login = async (email: string, password: string) => {
   const pool = await getDbPool()
 
-  const result = await pool.request().input('email', email).query(`
+  const result = await pool
+    .request()
+    .input("email", email)
+    .query(`
     SELECT UserId, Mail, PassWord, RoleName
     FROM [User]
     WHERE Mail = @email
@@ -88,7 +160,7 @@ export const login = async (email: string, password: string) => {
   const payload: Payload = {
     userId: user.UserId,
     email: user.Mail,
-    role: user.RoleName
+    role: user.RoleName,
   }
 
   const accessToken = generateAccessToken(payload)
@@ -112,15 +184,15 @@ export const generateRefreshToken = async (payload: Payload): Promise<string> =>
   try {
     await pool
       .request()
-      .input('token', refreshToken)
-      .input('userId', payload.userId) // Lưu đúng userId
-      .input('expiresAt', expiresAt)
+      .input("token", refreshToken)
+      .input("userId", payload.userId)
+      .input("expiresAt", expiresAt)
       .query(`
         INSERT INTO RefreshToken (Token, UserId, ExpiresAt, Revoked)
         VALUES (@token, @userId, @expiresAt, 0)
       `)
   } catch (error) {
-    throw new Error('Error saving refresh token to the database')
+    throw new Error("Error saving refresh token to the database")
   }
 
   return refreshToken
@@ -128,15 +200,15 @@ export const generateRefreshToken = async (payload: Payload): Promise<string> =>
 
 // Xác minh Refresh Token
 export const verifyRefreshToken = async (
-  refreshToken: string
+  refreshToken: string,
 ): Promise<{ userId: number; email: string; role: string } | null> => {
   const pool = await getDbPool()
 
   try {
     const result = await pool
       .request()
-      .input('token', refreshToken)
-      .query('SELECT TOP 1 * FROM RefreshToken WHERE Token = @token AND Revoked = 0')
+      .input("token", refreshToken)
+      .query("SELECT TOP 1 * FROM RefreshToken WHERE Token = @token AND Revoked = 0")
 
     if (result.recordset.length === 0) return null
 
@@ -146,7 +218,10 @@ export const verifyRefreshToken = async (
 
     const decoded = jwt.verify(refreshToken, config.jwt.secret) as Payload
 
-    const userResult = await pool.request().input('userId', decoded.userId).query(`
+    const userResult = await pool
+      .request()
+      .input("userId", decoded.userId)
+      .query(`
       SELECT Mail, RoleName FROM [User] WHERE UserId = @userId
     `)
 
@@ -155,10 +230,10 @@ export const verifyRefreshToken = async (
     return {
       userId: decoded.userId,
       email: decoded.email,
-      role: decoded.role
+      role: decoded.role,
     }
   } catch (error) {
-    console.error('Error verifying refresh token:', error)
+    console.error("Error verifying refresh token:", error)
     return null
   }
 }
@@ -168,9 +243,9 @@ export const revokeRefreshToken = async (token: string): Promise<void> => {
   const pool = await getDbPool()
 
   try {
-    await pool.request().input('token', token).query('UPDATE RefreshToken SET Revoked = 1 WHERE Token = @token')
+    await pool.request().input("token", token).query("UPDATE RefreshToken SET Revoked = 1 WHERE Token = @token")
   } catch (error) {
-    throw new Error('Error revoking refresh token')
+    throw new Error("Error revoking refresh token")
   }
 }
 
@@ -180,27 +255,27 @@ export const PasswordChange = async (userId: number, password: string, newPasswo
 
   const Result = await pool
     .request()
-    .input('userId', userId)
-    .query('SELECT PassWord, Mail FROM [User] WHERE UserId = @userId')
+    .input("userId", userId)
+    .query("SELECT PassWord, Mail FROM [User] WHERE UserId = @userId")
 
   if (Result.recordset.length === 0) {
-    throw new Error('Account not found')
+    throw new Error("Account not found")
   }
 
   const user = Result.recordset[0]
 
   const match = await bcrypt.compare(password, user.PassWord)
   if (!match) {
-    throw new Error('Mật khẩu cũ không đúng')
+    throw new Error("Mật khẩu cũ không đúng")
   }
 
   const passwordregex = /^.{6,12}$/
   if (!passwordregex.test(newPassword)) {
-    throw new Error('Mật khẩu mới phải từ 6 đến 12 ký tự')
+    throw new Error("Mật khẩu mới phải từ 6 đến 12 ký tự")
   }
 
   if (password === newPassword) {
-    throw new Error('Mật khẩu mới không được trùng mật khẩu cũ')
+    throw new Error("Mật khẩu mới không được trùng mật khẩu cũ")
   }
 
   const newPasswordHash = await bcrypt.hash(newPassword, 10)
@@ -208,16 +283,16 @@ export const PasswordChange = async (userId: number, password: string, newPasswo
   try {
     await pool
       .request()
-      .input('userId', userId)
-      .input('newPasswordHash', newPasswordHash)
-      .query('UPDATE [User] SET PassWord = @newPasswordHash WHERE UserId = @userId')
+      .input("userId", userId)
+      .input("newPasswordHash", newPasswordHash)
+      .query("UPDATE [User] SET PassWord = @newPasswordHash WHERE UserId = @userId")
 
-    return { message: 'Password change is successful' }
+    return { message: "Password change is successful" }
   } catch (error: unknown) {
     if (error instanceof Error) {
-      throw new Error('Error updating password: ' + error.message)
+      throw new Error("Error updating password: " + error.message)
     } else {
-      throw new Error('Error updating password: Unknown error')
+      throw new Error("Error updating password: Unknown error")
     }
   }
 }

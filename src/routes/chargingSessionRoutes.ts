@@ -4,31 +4,12 @@ import { chargingSessionController } from "../controllers/chargingSessionControl
 
 const router = Router()
 
-// Charging session routes
-router.post("/start", authenticate, authorize(["EVDRIVER", "BUSINESS_DRIVER"]), chargingSessionController.startSession)
-router.post(
-  "/end/:sessionId",
-  authenticate,
-  authorize(["EVDRIVER", "BUSINESS_DRIVER"]),
-  chargingSessionController.endSession,
-)
-router.get(
-  "/details/:sessionId",
-  authenticate,
-  authorize(["EVDRIVER", "BUSINESS_DRIVER"]),
-  chargingSessionController.getSessionDetails,
-)
-router.get(
-  "/my-sessions",
-  authenticate,
-  authorize(["EVDRIVER", "BUSINESS_DRIVER"]),
-  chargingSessionController.getUserSessions,
-)
-router.get(
-  "/penalty/:sessionId",
-  authenticate,
-  authorize(["EVDRIVER", "BUSINESS_DRIVER"]),
-  chargingSessionController.calculatePenalty,
-)
+router.post("/start", authenticate, authorize(["EVDRIVER", "BUSINESS"]), chargingSessionController.startSession)
+router.patch("/:id/end", authenticate, authorize(["EVDRIVER", "BUSINESS"]), chargingSessionController.endSession)
+router.get("/:id", authenticate, authorize(["EVDRIVER", "BUSINESS"]), chargingSessionController.getSessionDetails)
+router.get("/my/sessions", authenticate, authorize(["EVDRIVER", "BUSINESS"]), chargingSessionController.getUserSessions)
+router.get("/company/:companyId", authenticate, authorize(["BUSINESS"]), chargingSessionController.getCompanySessions)
+router.post("/:id/penalty", authenticate, authorize(["STAFF", "ADMIN"]), chargingSessionController.addPenalty)
+router.get("/:id/price", authenticate, chargingSessionController.calculateSessionPrice)
 
 export { router as chargingSessionRoutes }

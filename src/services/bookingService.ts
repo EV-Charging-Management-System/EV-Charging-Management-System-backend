@@ -1,5 +1,6 @@
-import { NVarChar, Int, DateTime } from "mssql"
 import { getDbPool } from "../config/database"
+import { v4 as uuidv4 } from "uuid"
+
 interface CreateBookingParams {
   userId: number
   stationId: number
@@ -8,51 +9,48 @@ interface CreateBookingParams {
   depositStatus?: boolean
 }
 
-
-class BookingService {
+export class BookingService {
   async createBooking(params: CreateBookingParams): Promise<any> {
-  const pool = await getDbPool()
-  try {
-    const status = "ACTIVE"
-    const bookingDate = new Date()
+    const pool = await getDbPool()
+    try {
+      const status = "ACTIVE"
+      const bookingDate = new Date()
+      const qr = params.qr || uuidv4()
 
-    await pool
-      .request()
-      .input("UserId", params.userId)
-      .input("StationId", params.stationId)
-      .input("VehicleId", params.vehicleId)
-      .input("BookingDate", bookingDate)
-      .input("Status", status)
-      .input("DepositStatus", 0)
-      .query(`
-        INSERT INTO [Booking] (UserId, StationId, VehicleId, BookingDate, Status, DepositStatus)
-        VALUES (@UserId, @StationId, @VehicleId, @BookingDate, @Status, @DepositStatus)
-      `)
+      const result = await pool
+        .request()
+        .input("UserId", params.userId)
+        .input("StationId", params.stationId)
+        .input("VehicleId", params.vehicleId)
+        .input("BookingDate", bookingDate)
+        .input("Status", status)
+        .input("QR", qr)
+        .input("DepositStatus", params.depositStatus ? 1 : 0)
+        .query(`
+          INSERT INTO [Booking] (UserId, StationId, VehicleId, BookingDate, Status, QR, DepositStatus)
+          OUTPUT INSERTED.BookingId
+          VALUES (@UserId, @StationId, @VehicleId, @BookingDate, @Status, @QR, @DepositStatus)
+        `)
 
-      await pool
-      .request()
-      .input("StationId", params.stationId)
-      .query(`
-UPDATE [Station]
-SET ChargingPointTotal = ChargingPointTotal - 1
-WHERE StationId = @StationId;
-      `)
-
-    return { status, message: "Booking created successfully" }
-  } catch (error) {
-    throw new Error("Error creating booking: " + error)
+      return { bookingId: result.recordset[0].BookingId, qr, status, message: "Booking created successfully" }
+    } catch (error) {
+      throw new Error("Error creating booking: " + error)
+    }
   }
-}
-
 
   async getUserBookings(userId: number): Promise<any[]> {
     const pool = await getDbPool()
     try {
       const result = await pool
         .request()
-        .input("UserId", Int, userId)
+        .input("UserId", userId)
         .query(`
-          SELECT * FROM [Booking] WHERE UserId = @UserId
+          SELECT b.*, v.LicensePlate, v.VehicleName, s.StationName
+          FROM [Booking] b
+          JOIN [Vehicle] v ON b.VehicleId = v.VehicleId
+          JOIN [Station] s ON b.StationId = s.StationId
+          WHERE b.UserId = @UserId
+          ORDER BY b.BookingDate DESC
         `)
       return result.recordset
     } catch (error) {
@@ -60,14 +58,18 @@ WHERE StationId = @StationId;
     }
   }
 
-  async getBookingDetails(bookingId: string): Promise<any> {
+  async getBookingDetails(bookingId: number): Promise<any> {
     const pool = await getDbPool()
     try {
       const result = await pool
         .request()
-        .input("BookingId", NVarChar, bookingId)
+        .input("BookingId", bookingId)
         .query(`
-          SELECT * FROM [Booking] WHERE BookingId = @BookingId
+          SELECT b.*, v.LicensePlate, v.VehicleName, s.StationName
+          FROM [Booking] b
+          JOIN [Vehicle] v ON b.VehicleId = v.VehicleId
+          JOIN [Station] s ON b.StationId = s.StationId
+          WHERE b.BookingId = @BookingId
         `)
       return result.recordset[0]
     } catch (error) {
@@ -77,38 +79,55 @@ WHERE StationId = @StationId;
 
   async cancelBooking(bookingId: number, userId: number): Promise<any> {
     const pool = await getDbPool()
-try {
-  const result = await pool
-    .request()
-    .input("BookingId", Int, bookingId)
-    .query(`
-      DELETE FROM [Booking] WHERE BookingId = @BookingId
-    `)
+    try {
+      const result = await pool
+        .request()
+        .input("BookingId", bookingId)
+        .input("UserId", userId)
+        .query(`
+          DELETE FROM [Booking] WHERE BookingId = @BookingId AND UserId = @UserId
+        `)
 
-  if (result.rowsAffected[0] === 0) {
-    throw new Error("Booking not found or unauthorized")
+      if (result.rowsAffected[0] === 0) {
+        throw new Error("Booking not found or unauthorized")
+      }
+
+      return { message: "Booking cancelled successfully" }
+    } catch (error) {
+      throw new Error("Error cancelling booking")
+    }
   }
 
-  return { message: "Booking deleted successfully" }
-} catch (error) {
-  throw new Error("Error deleting booking")
-}
-
-  }
-
-  async getAvailableSlots(stationId: string): Promise<any[]> {
+  async getAvailableSlots(stationId: number): Promise<any> {
     const pool = await getDbPool()
     try {
       const result = await pool
         .request()
-        .input("StationId", Number.parseInt(stationId))
+        .input("StationId", stationId)
         .query(`
-          SELECT * FROM Station
-          WHERE StationId = @StationId 
+          SELECT 
+            s.*,
+            (SELECT COUNT(*) FROM [ChargingPoint] WHERE StationId = @StationId AND ChargingPointStatus = 'AVAILABLE') as AvailablePoints
+          FROM [Station] s
+          WHERE s.StationId = @StationId
         `)
-      return result.recordset
+      return result.recordset[0]
     } catch (error) {
       throw new Error("Error fetching available slots")
+    }
+  }
+
+  async checkoutBooking(bookingId: number): Promise<void> {
+    const pool = await getDbPool()
+    try {
+      await pool
+        .request()
+        .input("BookingId", bookingId)
+        .query(`
+          UPDATE [Booking] SET Status = 'COMPLETED' WHERE BookingId = @BookingId
+        `)
+    } catch (error) {
+      throw new Error("Error checking out booking")
     }
   }
 }

@@ -17,6 +17,8 @@ import { paymentRoutes } from "./routes/paymentRoutes"
 import { membershipRoutes } from "./routes/membershipRoutes"
 import { chargingSessionRoutes } from "./routes/chargingSessionRoutes"
 import { vehicleRoutes } from "./routes/vehicleRoutes"
+import companyRoutes from "./routes/companyRoutes"
+import { staffRoutes } from "./routes/staffRoutes"
 
 const app = express()
 app.use(express.json())
@@ -42,7 +44,7 @@ app.use(
   cors({
     origin: config.cors.origin,
     credentials: config.cors.credentials,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
 )
@@ -59,6 +61,9 @@ app.use("/api/payment", paymentRoutes)
 app.use("/api/membership", membershipRoutes)
 app.use("/api/charging-session", chargingSessionRoutes)
 app.use("/api/vehicle", vehicleRoutes)
+app.use("/api/company", companyRoutes)
+app.use("/api/staff", staffRoutes)
+
 // Initialize application
 export const initializeApp = async (): Promise<void> => {
   try {

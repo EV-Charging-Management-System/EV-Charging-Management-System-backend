@@ -1,14 +1,35 @@
-import { Router } from 'express'
-import { authenticate, authorize } from '../middlewares/authMiddleware'
-import { companyController } from '../controllers/companyController'
+import { Router } from "express"
+import { authenticate, authorize } from "../middlewares/authMiddleware"
+import {
+  getCompanies,
+  getCompanyById,
+  getCompanyVehicles,
+  addVehicleToCompany,
+  removeVehicleFromCompany,
+  getCompanyHistory,
+} from "../controllers/companyController"
 
 const router = Router()
 
-// Public list? For now require authentication for all operations
-router.get('/', authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER']), companyController.getAll)
-router.get('/:id', authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER']), companyController.getById)
-router.post('/', authenticate, authorize(['ADMIN','STAFF']), companyController.create)
-router.put('/:id', authenticate, authorize(['ADMIN','BUSINESS']), companyController.update)
-router.delete('/:id', authenticate, authorize(['ADMIN']), companyController.delete)
+// All company routes require authentication
+router.use(authenticate)
 
-export { router as companyRoutes }
+// Get all companies (admin only)
+router.get("/", authorize(["ADMIN"]), getCompanies)
+
+// Get company by ID
+router.get("/:id", getCompanyById)
+
+// Get company vehicles
+router.get("/:id/vehicles", getCompanyVehicles)
+
+// Add vehicle to company
+router.post("/:id/vehicles", authorize(["BUSINESS", "ADMIN"]), addVehicleToCompany)
+
+// Remove vehicle from company
+router.delete("/:id/vehicles/:vehicleId", authorize(["BUSINESS", "ADMIN"]), removeVehicleFromCompany)
+
+// Get company history
+router.get("/:id/history", getCompanyHistory)
+
+export default router
