@@ -12,7 +12,7 @@ import { authenticate } from "../middlewares/authMiddleware"
 
 const router = Router()
 
-// Public routes
+// Public routess
 router.post("/register", registerHandler)
 router.post("/register-business", registerBusinessHandler)
 router.post("/login", loginHandler)
