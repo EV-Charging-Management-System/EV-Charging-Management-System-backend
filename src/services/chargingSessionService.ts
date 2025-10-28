@@ -33,6 +33,7 @@ export class ChargingSessionService {
     try {
       const checkoutTime = new Date()
 
+      // Ensure the session belongs to the user via Booking
       const result = await pool
         .request()
         .input("SessionId", sessionId)

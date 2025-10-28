@@ -1,6 +1,6 @@
-import type { Response } from "express"
-import type { AuthRequest } from "../middlewares/authMiddleware"
-import { companyService } from "../services/companyService"
+import type { Response } from 'express'
+import type { AuthRequest } from '../middlewares/authMiddleware'
+import { companyService } from '../services/companyService'
 
 export const getCompanies = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -10,7 +10,7 @@ export const getCompanies = async (req: AuthRequest, res: Response): Promise<voi
     if (error instanceof Error) {
       res.status(500).json({ message: error.message })
     } else {
-      res.status(500).json({ message: "An unknown error occurred" })
+      res.status(500).json({ message: 'An unknown error occurred' })
     }
   }
 }
@@ -20,7 +20,7 @@ export const getCompanyById = async (req: AuthRequest, res: Response): Promise<v
     const { id } = req.params
     const company = await companyService.getCompanyById(Number(id))
     if (!company) {
-      res.status(404).json({ message: "Company not found" })
+      res.status(404).json({ message: 'Company not found' })
       return
     }
     res.json({ success: true, data: company })
@@ -28,7 +28,7 @@ export const getCompanyById = async (req: AuthRequest, res: Response): Promise<v
     if (error instanceof Error) {
       res.status(500).json({ message: error.message })
     } else {
-      res.status(500).json({ message: "An unknown error occurred" })
+      res.status(500).json({ message: 'An unknown error occurred' })
     }
   }
 }
@@ -42,7 +42,7 @@ export const getCompanyVehicles = async (req: AuthRequest, res: Response): Promi
     if (error instanceof Error) {
       res.status(500).json({ message: error.message })
     } else {
-      res.status(500).json({ message: "An unknown error occurred" })
+      res.status(500).json({ message: 'An unknown error occurred' })
     }
   }
 }
@@ -53,7 +53,7 @@ export const addVehicleToCompany = async (req: AuthRequest, res: Response): Prom
     const { vehicleName, vehicleType, licensePlate, battery } = req.body
 
     if (!vehicleName || !vehicleType || !licensePlate || battery === undefined) {
-      res.status(400).json({ message: "Missing required fields" })
+      res.status(400).json({ message: 'Missing required fields' })
       return
     }
 
@@ -63,7 +63,7 @@ export const addVehicleToCompany = async (req: AuthRequest, res: Response): Prom
     if (error instanceof Error) {
       res.status(500).json({ message: error.message })
     } else {
-      res.status(500).json({ message: "An unknown error occurred" })
+      res.status(500).json({ message: 'An unknown error occurred' })
     }
   }
 }
@@ -72,12 +72,12 @@ export const removeVehicleFromCompany = async (req: AuthRequest, res: Response):
   try {
     const { id, vehicleId } = req.params
     await companyService.removeVehicleFromCompany(Number(vehicleId))
-    res.json({ success: true, message: "Vehicle removed successfully" })
+    res.json({ success: true, message: 'Vehicle removed successfully' })
   } catch (error: unknown) {
     if (error instanceof Error) {
       res.status(500).json({ message: error.message })
     } else {
-      res.status(500).json({ message: "An unknown error occurred" })
+      res.status(500).json({ message: 'An unknown error occurred' })
     }
   }
 }
@@ -91,7 +91,7 @@ export const getCompanyHistory = async (req: AuthRequest, res: Response): Promis
     if (error instanceof Error) {
       res.status(500).json({ message: error.message })
     } else {
-      res.status(500).json({ message: "An unknown error occurred" })
+      res.status(500).json({ message: 'An unknown error occurred' })
     }
   }
 }
