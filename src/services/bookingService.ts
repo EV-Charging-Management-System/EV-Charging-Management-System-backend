@@ -77,6 +77,26 @@ export class BookingService {
     }
   }
 
+async getBookingByStationId(stationId: number): Promise<any[]> {
+    const pool = await getDbPool()
+    try {
+      const result = await pool
+        .request()
+        .input("StationId", stationId)
+        .query(`
+          SELECT b.*, v.LicensePlate, v.VehicleName, s.StationName
+          FROM [Booking] b
+          JOIN [Vehicle] v ON b.VehicleId = v.VehicleId
+          JOIN [Station] s ON b.StationId = s.StationId
+          WHERE b.StationId = @StationId
+        `)
+      return result.recordset
+    } catch (error) {
+      throw new Error("Error fetching booking details")
+    }
+  }
+
+  
   async cancelBooking(bookingId: number, userId: number): Promise<any> {
     const pool = await getDbPool()
     try {

@@ -6,7 +6,7 @@ export const config = {
   port: Number.parseInt(process.env.PORT || '5000'),
 
   database: {
-    server: process.env.DB_SERVER || 'localhost\\SQLEXPRESS',
+    server: process.env.DB_SERVER || 'localhost',
     database: process.env.DB_NAME || 'EVCharStation',
     user: process.env.DB_USER || 'sa',
     password: process.env.DB_PASSWORD || '12345',

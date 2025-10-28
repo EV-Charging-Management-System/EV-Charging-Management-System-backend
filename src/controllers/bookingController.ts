@@ -40,7 +40,21 @@ export class BookingController {
       next(error)
     }
   }
+  async getBookingsByStationId(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params
+    const bookings = await bookingService.getBookingByStationId(Number.parseInt(id))
 
+    if (!bookings || bookings.length === 0) {
+      res.status(404).json({ message: "Không tìm thấy booking cho trạm này" })
+      return
+    }
+
+    res.status(200).json({ success: true, data: bookings })
+  } catch (error) {
+    next(error)
+  }
+}
   async getBookingDetails(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params
