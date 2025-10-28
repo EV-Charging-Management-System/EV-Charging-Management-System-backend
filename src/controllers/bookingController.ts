@@ -4,27 +4,30 @@ import { bookingService } from "../services/bookingService"
 
 export class BookingController {
   async createBooking(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const { stationId, vehicleId } = req.body
-      const userId = req.user?.userId
+  try {
+    const { stationId, pointId, portId, vehicleId, startTime } = req.body
+    const userId = req.user?.userId
 
-      if (!userId || !stationId || !vehicleId) {
-        res.status(400).json({ message: "Missing required fields" })
-        return
-      }
-
-      const booking = await bookingService.createBooking({
-        userId,
-        stationId,
-        vehicleId,
-        depositStatus: true,
-      })
-
-      res.status(201).json({ success: true, data: booking })
-    } catch (error) {
-      next(error)
+    if (!userId || !stationId || !pointId || !portId || !vehicleId || !startTime) {
+      res.status(400).json({ message: "Missing required fields" })
+      return
     }
+
+    const booking = await bookingService.createBooking({
+      userId,
+      stationId,
+      pointId,
+      portId,
+      vehicleId,
+      startTime,
+      depositStatus: true,
+    })
+
+    res.status(201).json({ success: true, data: booking })
+  } catch (error) {
+    next(error)
   }
+}
 
   async getUserBookings(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {

@@ -5,39 +5,54 @@ interface CreateBookingParams {
   userId: number
   stationId: number
   vehicleId: number
+  pointId?: number
+  portId?: number
+  startTime?: string | Date
   qr?: string
   depositStatus?: boolean
 }
 
 export class BookingService {
   async createBooking(params: CreateBookingParams): Promise<any> {
-    const pool = await getDbPool()
-    try {
-      const status = "ACTIVE"
-      const bookingDate = new Date()
-      const qr = params.qr || uuidv4()
+  const pool = await getDbPool()
+  try {
+    const status = "ACTIVE"
+    const bookingDate = new Date()
+    const qr = params.qr || uuidv4()
+    const startTime = params.startTime ? new Date(params.startTime) : new Date()
 
-      const result = await pool
-        .request()
-        .input("UserId", params.userId)
-        .input("StationId", params.stationId)
-        .input("VehicleId", params.vehicleId)
-        .input("BookingDate", bookingDate)
-        .input("Status", status)
-        .input("QR", qr)
-        .input("DepositStatus", params.depositStatus ? 1 : 0)
-        .query(`
-          INSERT INTO [Booking] (UserId, StationId, VehicleId, BookingDate, Status, QR, DepositStatus)
-          OUTPUT INSERTED.BookingId
-          VALUES (@UserId, @StationId, @VehicleId, @BookingDate, @Status, @QR, @DepositStatus)
-        `)
+    const result = await pool
+      .request()
+      .input("UserId", params.userId)
+      .input("StationId", params.stationId)
+      .input("PointId", params.pointId)
+      .input("PortId", params.portId)
+      .input("VehicleId", params.vehicleId)
+      .input("BookingDate", bookingDate)
+      .input("StartTime", startTime)
+      .input("Status", status)
+      .input("QR", qr)
+      .input("DepositStatus", params.depositStatus ? 1 : 0)
+      .query(`
+        INSERT INTO [Booking] 
+          (UserId, StationId, PointId, PortId, VehicleId, BookingDate, StartTime, Status, QR, DepositStatus)
+        OUTPUT INSERTED.BookingId
+        VALUES 
+          (@UserId, @StationId, @PointId, @PortId, @VehicleId, @BookingDate, @StartTime, @Status, @QR, @DepositStatus)
+      `)
 
-      return { bookingId: result.recordset[0].BookingId, qr, status, message: "Booking created successfully" }
-    } catch (error) {
-      throw new Error("Error creating booking: " + error)
+    return {
+      bookingId: result.recordset[0].BookingId,
+      qr,
+      status,
+      message: "Booking created successfully"
     }
+  } catch (error) {
+    throw new Error("Error creating booking: " + error)
   }
+}
 
+  
   async getUserBookings(userId: number): Promise<any[]> {
     const pool = await getDbPool()
     try {
