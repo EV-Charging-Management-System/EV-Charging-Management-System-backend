@@ -4,6 +4,7 @@ import type { AuthRequest } from "@/middlewares/authMiddleware"
 import { buildVnpUrl, verifyVnpReturn } from "../utils/vnpay"
 import { NVarChar, Date as SqlDate, Decimal, Int } from "mssql"
 import { getDbPool } from "../config/database"
+import { subscriptionService } from "../services/subscriptionService"
 
 const getClientIp = (req: Request): string => {
   // X-Forwarded-For may contain a list of IPs. Take the first one.
@@ -17,22 +18,22 @@ class VnpayController {
   // Create a VNPAY payment URL (no DB insert yet)
   createPaymentUrl = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { sessionId, invoiceId, amount, orderInfo } = req.body as {
+      const { sessionId, invoiceId, packageId, amount, orderInfo } = req.body as {
         sessionId?: number
         invoiceId?: number
+        packageId?: number
         amount: number
         orderInfo?: string
       }
       const userId = req.user?.userId
-
-      if (!userId || !amount || (!sessionId && !invoiceId)) {
-        res.status(400).json({ message: "Missing required fields (need amount and either sessionId or invoiceId)" })
+      if (!userId || !amount || (!sessionId && !invoiceId && !packageId)) {
+        res.status(400).json({ message: "Missing required fields (need amount and one of sessionId, invoiceId or packageId)" })
         return
       }
 
-      const targetPrefix = sessionId ? `S_${sessionId}` : `I_${invoiceId}`
+      const targetPrefix = sessionId ? `S_${sessionId}` : invoiceId ? `I_${invoiceId}` : `P_${packageId}`
   const txnRef = `${targetPrefix}_${userId}_${Date.now()}`
-      const info = orderInfo || (sessionId ? `Thanh toan phien sac ${sessionId}` : `Thanh toan hoa don ${invoiceId}`)
+  const info = orderInfo || (sessionId ? `Thanh toan phien sac ${sessionId}` : invoiceId ? `Thanh toan hoa don ${invoiceId}` : `Thanh toan goi ${packageId}`)
 
       const url = buildVnpUrl({ amount, orderInfo: info, txnRef, ipAddr: getClientIp(req) })
       res.status(200).json({ data: { url, txnRef }, message: "VNPAY URL created" })
@@ -130,6 +131,23 @@ class VnpayController {
         // If invoice was paid, mark invoice as Paid
         if (invoiceId) {
           await pool.request().input("InvoiceId", Int, invoiceId).query(`UPDATE [Invoice] SET PaidStatus = 'Paid' WHERE InvoiceId = @InvoiceId`)
+        }
+
+        // If this was a package purchase (txnRef starting with P_), create the subscription for the user
+        // txnRef expected format for package: P_{packageId}_{userId}_{ts}
+        if (txnRef && txnRef.startsWith("P_")) {
+          try {
+            const partsP = txnRef.split("_")
+            const pkgId = Number(partsP[1]) || null
+            const uId = Number(partsP[2]) || userId
+            if (pkgId && uId) {
+              // default duration: 1 month (this can be extended to encode duration in txnRef)
+              await subscriptionService.buyForUser(Number(uId), Number(pkgId), 1, null)
+            }
+          } catch (errPkg) {
+            // log but do not fail the IPN ack
+            console.error("Failed to create subscription from VNPAY IPN:", errPkg)
+          }
         }
 
         res.status(200).json({ RspCode: "00", Message: "Confirm Success" })

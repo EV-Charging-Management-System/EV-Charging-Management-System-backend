@@ -89,6 +89,129 @@ class SubscriptionService {
       throw new Error('Error deleting subscription: ' + error)
     }
   }
+
+  // Business methods used by controllers
+  async buyForUser(userId: number, packageId: number, durationMonths = 1, companyId: number | null = null): Promise<any> {
+    const pool = await getDbPool()
+    try {
+      const startDate = new Date()
+      const startMonth = startDate.toLocaleString('en-US', { month: 'long' })
+      const result = await pool
+        .request()
+        .input('UserId', Int, userId)
+        .input('CompanyId', Int, companyId)
+        .input('PackageId', Int, packageId)
+        .input('StartMonth', NVarChar(100), startMonth)
+        .input('StartDate', SqlDate, startDate)
+        .input('DurationMonth', NVarChar(100), String(durationMonths))
+        .query(`
+          INSERT INTO [Subcription] (UserId, CompanyId, PackageId, StartMonth, StartDate, DurationMonth)
+          OUTPUT INSERTED.*
+          VALUES (@UserId, @CompanyId, @PackageId, @StartMonth, @StartDate, @DurationMonth)
+        `)
+
+      return result.recordset[0]
+    } catch (error) {
+      throw new Error('Error buying subscription for user: ' + error)
+    }
+  }
+
+  async buyForCompany(companyId: number, packageId: number, durationMonths = 1, userId: number | null = null): Promise<any> {
+    // A company purchase still writes a Subcription row. We keep optional userId for traceability.
+    const pool = await getDbPool()
+    try {
+      const startDate = new Date()
+      const startMonth = startDate.toLocaleString('en-US', { month: 'long' })
+      const result = await pool
+        .request()
+        .input('UserId', Int, userId)
+        .input('CompanyId', Int, companyId)
+        .input('PackageId', Int, packageId)
+        .input('StartMonth', NVarChar(100), startMonth)
+        .input('StartDate', SqlDate, startDate)
+        .input('DurationMonth', NVarChar(100), String(durationMonths))
+        .query(`
+          INSERT INTO [Subcription] (UserId, CompanyId, PackageId, StartMonth, StartDate, DurationMonth)
+          OUTPUT INSERTED.*
+          VALUES (@UserId, @CompanyId, @PackageId, @StartMonth, @StartDate, @DurationMonth)
+        `)
+
+      return result.recordset[0]
+    } catch (error) {
+      throw new Error('Error buying subscription for company: ' + error)
+    }
+  }
+
+  async getStatusByUserId(userId: number): Promise<{ subscription: any | null; active: boolean; expiresAt?: Date | null }>
+  {
+    const pool = await getDbPool()
+    try {
+      const result = await pool.request().input('UserId', Int, userId).query(`SELECT TOP 1 * FROM [Subcription] WHERE UserId = @UserId ORDER BY StartDate DESC`)
+      const subscription = result.recordset[0] || null
+      if (!subscription) return { subscription: null, active: false, expiresAt: null }
+
+      const duration = Number(subscription.DurationMonth) || 0
+      const start = new Date(subscription.StartDate)
+      const expiresAt = new Date(start)
+      expiresAt.setMonth(expiresAt.getMonth() + duration)
+      const active = expiresAt > new Date()
+      return { subscription, active, expiresAt }
+    } catch (error) {
+      throw new Error('Error fetching subscription status: ' + error)
+    }
+  }
+
+  async renewSubscriptionById(subcriptionId: number, addMonths = 1): Promise<any | null> {
+    const pool = await getDbPool()
+    try {
+      const existing = await this.getSubscriptionById(subcriptionId)
+      if (!existing) return null
+      const currentDuration = Number(existing.DurationMonth) || 0
+      const newDuration = currentDuration + addMonths
+      const result = await pool
+        .request()
+        .input('SubcriptionId', Int, subcriptionId)
+        .input('DurationMonth', NVarChar(100), String(newDuration))
+        .query(`
+          UPDATE [Subcription]
+          SET DurationMonth = @DurationMonth
+          OUTPUT INSERTED.*
+          WHERE SubcriptionId = @SubcriptionId
+        `)
+      return result.recordset[0]
+    } catch (error) {
+      throw new Error('Error renewing subscription: ' + error)
+    }
+  }
+
+  async renewLatestByUserId(userId: number, addMonths = 1): Promise<any | null> {
+    const pool = await getDbPool()
+    try {
+      const latest = await pool.request().input('UserId', Int, userId).query(`SELECT TOP 1 * FROM [Subcription] WHERE UserId = @UserId ORDER BY StartDate DESC`)
+      const sub = latest.recordset[0]
+      if (!sub) return null
+      return this.renewSubscriptionById(sub.SubcriptionId, addMonths)
+    } catch (error) {
+      throw new Error('Error renewing latest subscription for user: ' + error)
+    }
+  }
+
+  async cancelSubscriptionById(subcriptionId: number): Promise<boolean> {
+    // For simplicity, delete the subscription row to cancel
+    return this.deleteSubscription(subcriptionId)
+  }
+
+  async cancelLatestByUserId(userId: number): Promise<boolean> {
+    const pool = await getDbPool()
+    try {
+      const latest = await pool.request().input('UserId', Int, userId).query(`SELECT TOP 1 * FROM [Subcription] WHERE UserId = @UserId ORDER BY StartDate DESC`)
+      const sub = latest.recordset[0]
+      if (!sub) return false
+      return this.deleteSubscription(sub.SubcriptionId)
+    } catch (error) {
+      throw new Error('Error cancelling latest subscription for user: ' + error)
+    }
+  }
 }
 
 export const subscriptionService = new SubscriptionService()
