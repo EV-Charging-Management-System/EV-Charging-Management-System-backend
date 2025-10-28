@@ -5,20 +5,24 @@ interface CreateBookingParams {
   userId: number
   stationId: number
   vehicleId: number
-  pointId?: number
-  portId?: number
+  pointId: number
+  portId: number
+  bookingDate?: string | Date
   startTime?: string | Date
   qr?: string
   depositStatus?: boolean
 }
+
 
 export class BookingService {
   async createBooking(params: CreateBookingParams): Promise<any> {
   const pool = await getDbPool()
   try {
     const status = "ACTIVE"
-    const bookingDate = new Date()
     const qr = params.qr || uuidv4()
+
+    // ✅ Cho phép user nhập BookingDate, nếu không nhập thì lấy hiện tại
+    const bookingDate = params.bookingDate ? new Date(params.bookingDate) : new Date()
     const startTime = params.startTime ? new Date(params.startTime) : new Date()
 
     const result = await pool
@@ -45,12 +49,13 @@ export class BookingService {
       bookingId: result.recordset[0].BookingId,
       qr,
       status,
-      message: "Booking created successfully"
+      message: "Booking created successfully",
     }
   } catch (error) {
     throw new Error("Error creating booking: " + error)
   }
 }
+
 
   
   async getUserBookings(userId: number): Promise<any[]> {

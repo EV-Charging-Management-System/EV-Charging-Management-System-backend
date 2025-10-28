@@ -5,10 +5,10 @@ import { bookingService } from "../services/bookingService"
 export class BookingController {
   async createBooking(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { stationId, pointId, portId, vehicleId, startTime } = req.body
+    const { stationId, pointId, portId, vehicleId, bookingDate, startTime, depositStatus } = req.body
     const userId = req.user?.userId
 
-    if (!userId || !stationId || !pointId || !portId || !vehicleId || !startTime) {
+    if (!userId || !stationId || !pointId || !portId || !vehicleId || !bookingDate || !startTime || depositStatus === undefined) {
       res.status(400).json({ message: "Missing required fields" })
       return
     }
@@ -19,8 +19,9 @@ export class BookingController {
       pointId,
       portId,
       vehicleId,
+      bookingDate,
       startTime,
-      depositStatus: true,
+      depositStatus,
     })
 
     res.status(201).json({ success: true, data: booking })
