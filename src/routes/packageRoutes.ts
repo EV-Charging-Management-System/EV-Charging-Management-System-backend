@@ -7,7 +7,6 @@ const router = Router()
 // List and detail available to authenticated users
 router.get('/', authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER']), packageController.getAll)
 router.get('/:id', authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER']), packageController.getById)
-
 // Create/update/delete restricted to ADMIN or STAFF
 router.post('/', authenticate, authorize(['ADMIN','STAFF']), packageController.create)
 router.put('/:id', authenticate, authorize(['ADMIN','STAFF']), packageController.update)
