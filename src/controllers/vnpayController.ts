@@ -191,7 +191,10 @@ class VnpayController {
                 const bk = await pool.request().input("BookingId", Int, bookingId).query(`SELECT Status FROM [Booking] WHERE BookingId = @BookingId`)
                 const currentBkStatus: string | undefined = bk.recordset[0]?.Status
                 if (currentBkStatus !== "ACTIVE") {
-                  await pool.request().input("BookingId", Int, bookingId).query(`UPDATE [Booking] SET Status = 'ACTIVE', DepositPaid = 1 WHERE BookingId = @BookingId`)
+                  await pool.request().input("BookingId", Int, bookingId).query(`UPDATE [Booking] SET Status = 'ACTIVE', DepositStatus = 1 WHERE BookingId = @BookingId`)
+                } else {
+                  // ensure deposit flag is set even if status already ACTIVE
+                  await pool.request().input("BookingId", Int, bookingId).query(`UPDATE [Booking] SET DepositStatus = 1 WHERE BookingId = @BookingId`)
                 }
                 // Ensure QR matches txnRef (idempotent)
                 if (txnRef) {
@@ -228,7 +231,9 @@ class VnpayController {
             const bk = await pool.request().input("BookingId", Int, bookingId).query(`SELECT Status FROM [Booking] WHERE BookingId = @BookingId`)
             const currentBkStatus: string | undefined = bk.recordset[0]?.Status
             if (currentBkStatus !== "ACTIVE") {
-              await pool.request().input("BookingId", Int, bookingId).query(`UPDATE [Booking] SET Status = 'ACTIVE', DepositPaid = 1 WHERE BookingId = @BookingId`)
+              await pool.request().input("BookingId", Int, bookingId).query(`UPDATE [Booking] SET Status = 'ACTIVE', DepositStatus = 1 WHERE BookingId = @BookingId`)
+            } else {
+              await pool.request().input("BookingId", Int, bookingId).query(`UPDATE [Booking] SET DepositStatus = 1 WHERE BookingId = @BookingId`)
             }
             // Ensure QR matches txnRef after activation
             if (txnRef) {

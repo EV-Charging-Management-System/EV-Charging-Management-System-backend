@@ -41,7 +41,7 @@ export class BookingService {
         .input("StartTime", startTime)
         .input("Status", pendingStatus)
         .input("QR", qr)
-        .input("DepositStatus", 1)
+  .input("DepositStatus", 0)
         .input("DepositAmount", (params.depositAmount as number) || DEFAULT_DEPOSIT_AMOUNT)
         .query(`
           INSERT INTO [Booking] 
@@ -102,7 +102,7 @@ export class BookingService {
       .input("StartTime", startTime)
       .input("Status", status)
       .input("QR", qr)
-      .input("DepositStatus", params.depositStatus ? 1 : 0)
+  .input("DepositStatus", 0)
       .query(`
         INSERT INTO [Booking] 
           (UserId, StationId, PointId, PortId, VehicleId, BookingDate, StartTime, Status, QR, DepositStatus)
