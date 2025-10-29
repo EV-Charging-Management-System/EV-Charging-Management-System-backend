@@ -193,6 +193,14 @@ class VnpayController {
                 if (currentBkStatus !== "ACTIVE") {
                   await pool.request().input("BookingId", Int, bookingId).query(`UPDATE [Booking] SET Status = 'ACTIVE', DepositPaid = 1 WHERE BookingId = @BookingId`)
                 }
+                // Ensure QR matches txnRef (idempotent)
+                if (txnRef) {
+                  await pool
+                    .request()
+                    .input("BookingId", Int, bookingId)
+                    .input("QR", NVarChar, txnRef)
+                    .query(`UPDATE [Booking] SET QR = @QR WHERE BookingId = @BookingId`)
+                }
               }
               res.status(200).json({ RspCode: "00", Message: "Confirm Success (idempotent)" })
               return
@@ -221,6 +229,14 @@ class VnpayController {
             const currentBkStatus: string | undefined = bk.recordset[0]?.Status
             if (currentBkStatus !== "ACTIVE") {
               await pool.request().input("BookingId", Int, bookingId).query(`UPDATE [Booking] SET Status = 'ACTIVE', DepositPaid = 1 WHERE BookingId = @BookingId`)
+            }
+            // Ensure QR matches txnRef after activation
+            if (txnRef) {
+              await pool
+                .request()
+                .input("BookingId", Int, bookingId)
+                .input("QR", NVarChar, txnRef)
+                .query(`UPDATE [Booking] SET QR = @QR WHERE BookingId = @BookingId`)
             }
           }
         } else {

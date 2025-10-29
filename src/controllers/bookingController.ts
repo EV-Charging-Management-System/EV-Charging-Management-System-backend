@@ -62,6 +62,12 @@ export class BookingController {
             .input("PaymentId", paymentId)
             .input("TxnRef", finalTxnRef)
             .query(`UPDATE [Payment] SET TxnRef = @TxnRef WHERE PaymentId = @PaymentId`)
+          // Ensure Booking QR matches txnRef as requested (use txnRef as QR code)
+          await pool
+            .request()
+            .input("BookingId", bookingId)
+            .input("QR", finalTxnRef)
+            .query(`UPDATE [Booking] SET QR = @QR WHERE BookingId = @BookingId`)
         } catch (err) {
           console.error("Failed to update payment with final txnRef:", err)
         }
