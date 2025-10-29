@@ -42,8 +42,20 @@ class StationController {
     next(error)
   }
 })
-  
+  GetPort = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { pointId } = req.query
+    if (!pointId) {
+      res.status(400).json({ message: "Missing pointId" })
+      return
+    }
 
+    const port = await stationService.getPortByPoint(Number(pointId))
+    res.status(200).json({ data: port, message: "Fetched port by point successfully" })
+  } catch (error) {
+    next(error)
+  }
+})
 }
 
 export const stationController = new StationController()
