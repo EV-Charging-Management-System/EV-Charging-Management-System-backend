@@ -4,7 +4,9 @@ import { bookingController } from "../controllers/bookingController"
 
 const router = Router()
 
-router.post("/", authenticate, authorize(["EVDRIVER", "BUSINESS"]), bookingController.createBooking)
+router.post("/", authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER']), bookingController.createBooking)
+router.get("/txn/:txnRef", authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER']), bookingController.getBookingByTxnRef)
+router.get("/payment/:paymentId", authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER']), bookingController.getBookingByPaymentId)
 router.get("/my", authenticate, authorize(["EVDRIVER", "BUSINESS"]), bookingController.getUserBookings)
 router.get("/station/:id", authenticate, authorize(["EVDRIVER", "BUSINESS"]), bookingController.getBookingsByStationId)
 router.get("/:id", authenticate, authorize(["EVDRIVER", "BUSINESS"]), bookingController.getBookingDetails)
