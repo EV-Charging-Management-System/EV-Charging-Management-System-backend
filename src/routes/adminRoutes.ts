@@ -16,5 +16,5 @@ router.get("/users/:id", adminController.getUserById)
 router.patch("/users/:id/role", adminController.updateUserRole)
 router.get("/reports/revenue", adminController.getRevenueReport)
 router.get("/reports/usage", adminController.getUsageReport)
-
+router.post("/createstaff", adminController.createStaff)
 export { router as adminRoutes }
