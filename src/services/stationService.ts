@@ -157,6 +157,38 @@ async getStationInfor(address: string): Promise<any[]> {
       throw new Error("Error deleting station")
     }
   }
+  
+  async getPointsByStation(stationId: number): Promise<any[]> {
+  const pool = await getDbPool()
+  try {
+    const result = await pool.request()
+      .input("StationId", stationId)
+      .query(`
+        SELECT PointId, StationId, ChargingPointStatus, NumberOfPort
+        FROM [ChargingPoint]
+        WHERE StationId = @StationId
+      `)
+    return result.recordset
+  } catch (error) {
+    throw new Error("Error fetching points for station: " + error)
+  }
+
+}
+  async getPortByPoint(pointId: number): Promise<any[]> {
+  const pool = await getDbPool()
+  try {
+    const result = await pool.request()
+      .input("PointId", pointId)
+      .query(`
+        SELECT PortId, PointId, PortType, PortStatus
+        FROM [ChargingPort]
+        WHERE PointId = @PointId
+      `)
+    return result.recordset
+  } catch (error) {
+    throw new Error("Error fetching ports for point: " + error)
+  }
+}
 }
 
 export const stationService = new StationService()
