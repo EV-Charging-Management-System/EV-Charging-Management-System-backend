@@ -189,6 +189,31 @@ export class AdminService {
       throw new Error("Error fetching dashboard stats")
     }
   }
+  async createStaff(mail: string, userName: string, password: string): Promise<void> {
+    const pool = await getDbPool()
+    try {
+      await pool
+        .request()
+        .input("mail", mail)
+        .input("userName", userName)
+        .input("password", password)
+        .query(`
+          INSERT INTO [User] (Mail, UserName, Password, RoleName)
+          VALUES (@mail, @userName, @password, 'STAFF')
+        `)
+        const us = await pool
+        .request()
+        .input("mail", mail)
+        .query(`
+          SELECT UserId FROM [User] WHERE Mail = @mail
+        `)
+       return us.recordset[0];
+      
+    } catch (error) {
+      throw new Error("Error creating staff user")
+    } 
+    
+  }
 }
 
 export const adminService = new AdminService()

@@ -100,6 +100,20 @@ export class AdminController {
       next(error)
     }
   }
+  async createStaff(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { Email, PasswordHash, FullName } = req.body  
+      if (!Email || !PasswordHash || !FullName) {
+        res.status(400).json({ message: "All fields are required" })
+        return
+      }
+      const newStaff = await adminService.createStaff( Email,  FullName ,PasswordHash)
+      res.status(201).json({ success: true, data: newStaff, message: "Staff created successfully" })
+    } catch (error) {
+      next(error)
+    }
+  }
 }
+
 
 export const adminController = new AdminController()
