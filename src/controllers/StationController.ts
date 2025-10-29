@@ -27,15 +27,23 @@ class StationController {
       next(error)
     }
   })
+  GetPoint = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { stationId } = req.query
 
-  GetMaybe = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const stations = await stationService.getAllStations()
-      res.status(200).json({ data: stations, message: "All stations fetched successfully" })
-    } catch (error) {
-      next(error)
+    if (!stationId) {
+      res.status(400).json({ message: "Missing stationId" })
+      return
     }
-  })
+
+    const points = await stationService.getPointsByStation(Number(stationId))
+    res.status(200).json({ data: points, message: "Fetched points by station successfully" })
+  } catch (error) {
+    next(error)
+  }
+})
+  
+
 }
 
 export const stationController = new StationController()
