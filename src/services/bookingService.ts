@@ -10,7 +10,7 @@ interface CreateBookingParams {
   bookingDate?: string | Date
   startTime?: string | Date
   qr?: string
-  depositStatus?: boolean
+  depositAmount: number
 }
 
 
@@ -36,13 +36,13 @@ export class BookingService {
       .input("StartTime", startTime)
       .input("Status", status)
       .input("QR", qr)
-      .input("DepositStatus", params.depositStatus ? 1 : 0)
+      .input("DepositAmount", params.depositAmount || 0)
       .query(`
         INSERT INTO [Booking] 
-          (UserId, StationId, PointId, PortId, VehicleId, BookingDate, StartTime, Status, QR, DepositStatus)
+          (UserId, StationId, PointId, PortId, VehicleId, BookingDate, StartTime, Status, QR, DepositAmount)
         OUTPUT INSERTED.BookingId
         VALUES 
-          (@UserId, @StationId, @PointId, @PortId, @VehicleId, @BookingDate, @StartTime, @Status, @QR, @DepositStatus)
+          (@UserId, @StationId, @PointId, @PortId, @VehicleId, @BookingDate, @StartTime, @Status, @QR, @DepositAmount)
       `)
 
     return {
