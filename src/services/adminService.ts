@@ -214,6 +214,23 @@ export class AdminService {
     } 
     
   }
+  async getAllStaff(): Promise<any[]> {
+    const pool = await getDbPool()
+    try {
+      const result = await pool.request().query(`
+        SELECT 
+          UserId,
+          Mail,
+          UserName
+        FROM [User]
+        WHERE RoleName = 'STAFF'
+        ORDER BY UserId DESC
+      `)
+      return result.recordset
+    } catch (error) {
+      throw new Error("Error fetching staff users")
+    }
+  }
 }
 
 export const adminService = new AdminService()
