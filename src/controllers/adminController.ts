@@ -113,6 +113,14 @@ export class AdminController {
       next(error)
     }
   }
+  async getAllStaff(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const staffList = await adminService.getAllStaff()
+      res.status(200).json({ success: true, data: staffList })
+    } catch (error) {
+      next(error)
+    }
+  }
 }
 
 

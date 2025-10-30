@@ -17,4 +17,5 @@ router.patch("/users/:id/role", adminController.updateUserRole)
 router.get("/reports/revenue", adminController.getRevenueReport)
 router.get("/reports/usage", adminController.getUsageReport)
 router.post("/createstaff", adminController.createStaff)
+router.get("/getAllStaff", adminController.getAllStaff)
 export { router as adminRoutes }
