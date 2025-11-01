@@ -50,12 +50,17 @@ class VnpayController {
     const transactionStatus = query.vnp_TransactionStatus
 
     // Do not update DB here; rely on IPN for final status. Just inform client.
-    res.status(200).json({
-      success: isValid && responseCode === "00" && transactionStatus === "00",
-      message: isValid ? "VNPAY return processed" : "Invalid signature",
-      data: { txnRef, responseCode, transactionStatus },
-    })
+    if (responseCode === '00') {
+    // Thanh toán thành công
+    return res.redirect(`http://localhost:3000/payment-success?code=${responseCode}`);
+  } else {
+    // Thanh toán thất bại
+    return res.redirect(`http://localhost:3000/payment-fail?code=${responseCode}`);
+  }
   })
+  //thằng phú mới là thằng bịp m đó
+  //đéo có thằng nào mà vnpay return lại để vào res.json đâu
+  // chúc em may mắn :3 <3
 
   // VNPAY IPN (server-to-server). Update DB status here.
   vnpIpn = asyncHandler(async (req: Request, res: Response): Promise<void> => {
