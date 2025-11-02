@@ -98,6 +98,17 @@ export class ChargingSessionController {
       next(error)
     }
   }
+  async generateInvoice(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.user?.userId
+      const { id } = req.params
+      const invoice = await chargingSessionService.generateInvoiceService(Number(id), userId  || 0)
+      res.status(201).json({ success: true, data: invoice })
+    } catch (error) {
+      next(error)
+    }
+  }
 }
+
 
 export const chargingSessionController = new ChargingSessionController()

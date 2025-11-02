@@ -94,17 +94,19 @@ const checkoutTime = now.toISOString().slice(0, 19).replace('T', ' ')
         `);
       }
       if (mathTime < new Date(result.recordset[0].CheckinTime + result.recordset[0].TotalTime * 60 * 1000 ).getTime()) {
-        const x = Math.abs(new Date(result.recordset[0].CheckoutTime).getTime() - new Date(result.recordset[0].CheckinTime).getTime());
-        const totalTime = Math.ceil(x / (60 * 1000)); // convert milliseconds to minutes
-        const price1 = totalTime * port.recordset[0].PortTypeOfKwh * port.recordset[0].PortTypePrice; // assuming rate is 3000 VND per minute
-        await pool
-        .request()
-        .input("SessionId", sessionId)
-        .input("TotalPrice", price1)
-        .query(`
-          UPDATE [ChargingSession] SET SessionPrice = @TotalPrice WHERE SessionId = @SessionId
-        `);
-      }else{
+        if(result.recordset[0].CheckoutTime < result.recordset[0].CheckinTime + result.recordset[0].TotalTime * 60 * 1000){
+          const x = Math.abs(new Date(result.recordset[0].CheckoutTime).getTime() - new Date(result.recordset[0].CheckinTime).getTime());
+          const totalTime = Math.ceil(x / (60 * 1000)); // convert milliseconds to minutes
+          const price1 = totalTime * port.recordset[0].PortTypeOfKwh * port.recordset[0].PortTypePrice;
+          await pool
+          .request()
+          .input("SessionId", sessionId)
+          .input("TotalPrice", price1)
+          .query(`
+            UPDATE [ChargingSession] SET SessionPrice = @TotalPrice WHERE SessionId = @SessionId
+          `);
+        } 
+      else{
         const price2 = result.recordset[0].TotalTime * port.recordset[0].PortTypeOfKwh * port.recordset[0].PortTypePrice;
         await pool
         .request()
@@ -114,7 +116,8 @@ const checkoutTime = now.toISOString().slice(0, 19).replace('T', ' ')
           UPDATE [ChargingSession] SET SessionPrice = @TotalPrice WHERE SessionId = @SessionId
         `);
       }
-      
+    }
+    
       return { message: "Session ended successfully", checkoutTime }
     } catch (error) {
       throw new Error("Error ending charging session: " + error)
@@ -222,6 +225,22 @@ const checkoutTime = now.toISOString().slice(0, 19).replace('T', ' ')
       throw new Error("Error calculating session price")
     }
   }
+  async generateInvoiceService(sessionId: number, userId: number): Promise<any> {
+    const pool = await getDbPool()
+    try {
+      const company = await pool.request().input("UserId", userId).query(`SELECT CompanyId FROM [User] WHERE UserId = @UserId`)
+      const session = await pool.request().input("SessionId", sessionId).query(`SELECT * FROM [ChargingSession] WHERE SessionId = @SessionId`)
+      await pool
+        .request()
+        .input("UserId", userId)
+        .input("SessionId", sessionId)
+        .input("CompanyId", company.recordset[0]?.CompanyId || null)
+        .input("Amount", session.recordset[0]?.SessionPrice + session.recordset[0]?.PenaltyFee || 0)
+        .input("Status", "Pending")
+        .query(`INSERT INTO [Invoice] (UserId, SessionId, CompanyId, TotalAmount,PaidStatus) VALUES (@UserId, @SessionId, @CompanyId, @Amount,@Status)`)
+    } catch (error) {
+      throw new Error("Error generating invoice")
+    }
+  }
 }
-
 export const chargingSessionService = new ChargingSessionService()
