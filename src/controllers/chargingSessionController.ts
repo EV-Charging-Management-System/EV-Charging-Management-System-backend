@@ -5,14 +5,14 @@ import { chargingSessionService } from "../services/chargingSessionService"
 export class ChargingSessionController {
   async startSession(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { bookingId, vehicleId, stationId, batteryPercentage } = req.body
+      const { bookingId, vehicleId, stationId, pointId, portId, batteryPercentage } = req.body
 
-      if (!bookingId || !vehicleId || !stationId || batteryPercentage === undefined) {
+      if (!bookingId || !vehicleId || !stationId || !pointId || !portId || batteryPercentage === undefined) {
         res.status(400).json({ message: "Missing required fields" })
         return
       }
 
-      const session = await chargingSessionService.startSession(bookingId, vehicleId, stationId, batteryPercentage)
+      const session = await chargingSessionService.startSession(bookingId, vehicleId, stationId, pointId, portId, batteryPercentage)
       res.status(201).json({ success: true, data: session })
     } catch (error) {
       next(error)
