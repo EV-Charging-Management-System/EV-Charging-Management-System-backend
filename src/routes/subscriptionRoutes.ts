@@ -1,18 +1,54 @@
-import { Router } from 'express'
-import { authenticate, authorize } from '../middlewares/authMiddleware'
-import { subscriptionController } from '../controllers/subscriptionController'
+import { Router } from "express";
+import { authenticate, authorize } from "../middlewares/authMiddleware";
+import { subscriptionController } from "../controllers/subscriptionController";
 
-const router = Router()
+const router = Router();
 
-// List and detail for authenticated users
-router.get('/', authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER']), subscriptionController.getAll)
-router.get('/:id', authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER']), subscriptionController.getById)
+/**
+ * 🟢 Subscription Routes — Quản lý gói Premium
+ */
 
-// Create by authenticated users (individual user or business)
-router.post('/', authenticate, subscriptionController.create)
+// 🧩 1️⃣ Lấy gói hiện tại của user đang đăng nhập
+router.get(
+	"/current",
+	authenticate,
+	authorize(["ADMIN", "BUSINESS", "STAFF", "EVDRIVER"]),
+	subscriptionController.getCurrentUserSubscription
+);
 
-// Update/Delete restricted to ADMIN or STAFF
-router.put('/:id', authenticate, authorize(['ADMIN','STAFF']), subscriptionController.update)
-router.delete('/:id', authenticate, authorize(['ADMIN','STAFF']), subscriptionController.delete)
+// 🧩 2️⃣ Lấy danh sách toàn bộ subscription (Admin/Staff)
+router.get(
+	"/",
+	authenticate,
+	authorize(["ADMIN", "BUSINESS", "STAFF"]),
+	subscriptionController.getAll
+);
 
-export { router as subscriptionRoutes }
+// 🧩 3️⃣ Lấy chi tiết subscription theo ID
+router.get(
+	"/:id",
+	authenticate,
+	authorize(["ADMIN", "BUSINESS", "STAFF", "EVDRIVER"]),
+	subscriptionController.getById
+);
+
+// 🧩 4️⃣ User tự tạo subscription (mua gói)
+router.post("/", authenticate, subscriptionController.create);
+
+// 🧩 5️⃣ Cập nhật subscription (Admin/Staff)
+router.put(
+	"/:id",
+	authenticate,
+	authorize(["ADMIN", "STAFF"]),
+	subscriptionController.update
+);
+
+// 🧩 6️⃣ Xóa subscription (Admin/Staff)
+router.delete(
+	"/:id",
+	authenticate,
+	authorize(["ADMIN", "STAFF"]),
+	subscriptionController.delete
+);
+
+export { router as subscriptionRoutes };

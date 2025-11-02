@@ -10,14 +10,16 @@ export interface BuildVnpUrlParams {
   orderInfo: string
   txnRef: string
   ipAddr?: string
+  returnUrl?: string
 }
 
-export const buildVnpUrl = ({ amount, orderInfo, txnRef, ipAddr }: BuildVnpUrlParams): string => {
+export const buildVnpUrl = ({ amount, orderInfo, txnRef, ipAddr, returnUrl }: BuildVnpUrlParams): string => {
   const vnpay = ((config as any).vnpay || {
     url: process.env.VNP_URL,
     tmnCode: process.env.VNP_TMN_CODE,
     hashSecret: process.env.VNP_HASH_SECRET,
-    returnUrl: process.env.VNP_RETURN_URL,
+    // Fallback: env VNP_RETURN_URL or VNP_RETURNURL; default dev URL if missing
+    returnUrl: process.env.VNP_RETURN_URL || process.env.VNP_RETURNURL || "http://localhost:3000/vnpay-return",
     ipnUrl: process.env.VNP_IPN_URL,
   }) as {
     url?: string
@@ -31,7 +33,6 @@ export const buildVnpUrl = ({ amount, orderInfo, txnRef, ipAddr }: BuildVnpUrlPa
   if (!vnpay.tmnCode) missing.push("VNP_TMN_CODE")
   if (!vnpay.hashSecret) missing.push("VNP_HASH_SECRET")
   if (!vnpay.url) missing.push("VNP_URL")
-  if (!vnpay.returnUrl) missing.push("VNP_RETURN_URL")
 
   if (missing.length) {
     // Log the current vnpay configuration so it's easy to debug which values are missing.
@@ -40,7 +41,7 @@ export const buildVnpUrl = ({ amount, orderInfo, txnRef, ipAddr }: BuildVnpUrlPa
       tmnCode: vnpay.tmnCode,
       hashSecret: vnpay.hashSecret ? "***REDACTED***" : vnpay.hashSecret,
       url: vnpay.url,
-      returnUrl: vnpay.returnUrl,
+      returnUrl: returnUrl || vnpay.returnUrl,
       ipnUrl: vnpay.ipnUrl,
     })
 
@@ -60,7 +61,7 @@ export const buildVnpUrl = ({ amount, orderInfo, txnRef, ipAddr }: BuildVnpUrlPa
     vnp_OrderInfo: orderInfo,
     vnp_OrderType: "billpayment",
     vnp_Amount: Math.round(Number(amount)) * 100, // VND in cents
-    vnp_ReturnUrl: vnpay.returnUrl,
+    vnp_ReturnUrl: returnUrl || vnpay.returnUrl,
     vnp_IpAddr: ipAddr || "127.0.0.1",
     vnp_CreateDate: createDate,
   }
