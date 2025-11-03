@@ -99,6 +99,30 @@ export class VehicleService {
       throw new Error("Error deleting vehicle")
     }
   }
+
+  async getCompanyByLicensePlate(licensePlate: string): Promise<any | null> {
+    const pool = await getDbPool()
+    try {
+      const result = await pool
+        .request()
+        .input("LicensePlate", licensePlate)
+        .query(`
+          SELECT TOP 1
+            v.VehicleId,
+            v.LicensePlate,
+            u.UserId,
+            u.CompanyId,
+            c.CompanyName
+          FROM [Vehicle] v
+          JOIN [User] u ON v.UserId = u.UserId
+          LEFT JOIN [Company] c ON u.CompanyId = c.CompanyId
+          WHERE v.LicensePlate = @LicensePlate
+        `)
+      return result.recordset[0] || null
+    } catch (error) {
+      throw new Error("Error looking up company by license plate")
+    }
+  }
 }
 
 export const vehicleService = new VehicleService()

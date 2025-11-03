@@ -10,4 +10,12 @@ router.get("/:id", authenticate, authorize(["EVDRIVER", "BUSINESS"]), vehicleCon
 router.patch("/:id", authenticate, authorize(["EVDRIVER", "BUSINESS"]), vehicleController.updateVehicle)
 router.delete("/:id", authenticate, authorize(["EVDRIVER", "BUSINESS"]), vehicleController.deleteVehicle)
 
+
+router.get(
+	"/lookup/company-by-plate",
+	authenticate,
+	authorize(["ADMIN", "STAFF", "EVDRIVER", "BUSINESS"]),
+	vehicleController.getCompanyByLicensePlate,
+)
+
 export { router as vehicleRoutes }
