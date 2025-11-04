@@ -70,34 +70,37 @@ export class ChargingSessionController {
     }
   }
 
-  async addPenalty(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const { id } = req.params
-      const { penaltyFee } = req.body
 
-      if (!penaltyFee) {
-        res.status(400).json({ message: "Penalty fee is required" })
-        return
-      }
+  // async addPenalty(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  //   try {
+  //     const { id } = req.params
+  //     const { penaltyFee } = req.body
 
-      await chargingSessionService.addPenalty(Number(id), penaltyFee)
-      res.json({ success: true, message: "Penalty added successfully" })
-    } catch (error) {
-      next(error)
-    }
-  }
+  //     if (!penaltyFee) {
+  //       res.status(400).json({ message: "Penalty fee is required" })
+  //       return
+  //     }
 
-  async calculateSessionPrice(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const { id } = req.params
-      const { discountPercent } = req.query
+  //     await chargingSessionService.addPenalty(Number(id), penaltyFee)
+  //     res.json({ success: true, message: "Penalty added successfully" })
+  //   } catch (error) {
+  //     next(error)
+  //   }
+  // }
 
-      const price = await chargingSessionService.calculateSessionPrice(Number(id), Number(discountPercent) || 0)
-      res.json({ success: true, data: { price } })
-    } catch (error) {
-      next(error)
-    }
-  }
+  // async calculateSessionPrice(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  //   try {
+  //     const { id } = req.params
+  //     const { discountPercent } = req.query
+
+  //     const price = await chargingSessionService.calculateSessionPrice(Number(id), Number(discountPercent) || 0)
+  //     res.json({ success: true, data: { price } })
+  //   } catch (error) {
+  //     next(error)
+  //   }
+  // }
+  
+
   async generateInvoice(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = req.user?.userId
@@ -108,6 +111,56 @@ export class ChargingSessionController {
       next(error)
     }
   }
+  async startSessionByStaff(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { stationId, pointId, portId, licensePlate, batteryPercentage } = req.body
+      if (!stationId || !pointId || !portId || !licensePlate || batteryPercentage === undefined) {
+        res.status(400).json({ message: "Missing required fields" })
+        return
+      }
+
+      const session = await chargingSessionService.startSessionStaff(stationId, pointId, portId, licensePlate, batteryPercentage)
+      res.status(201).json({ success: true, data: session })
+    }
+    catch (error) {
+      next(error)
+    }
+  }
+  async endSessionByStaff(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params
+      const result = await chargingSessionService.endSession(Number(id))
+      res.json({ success: true, data: result })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  async startSessionForGuest(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { stationId, pointId, portId, licensePlate, battery, batteryPercentage } = req.body
+
+      if (!stationId || !pointId || !portId || batteryPercentage === undefined) {
+        res.status(400).json({ message: "Missing required fields" })
+        return
+      }
+
+      const session = await chargingSessionService.startSessionForGuest(stationId, pointId, portId, licensePlate)
+      res.status(201).json({ success: true, data: session })
+    } catch (error) {
+      next(error)
+    }
+  }
+  async endSessionForGuest(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params
+      const result = await chargingSessionService.endSession(Number(id))
+      res.json({ success: true, data: result })
+    } catch (error) {
+      next(error)
+    }
+  }
+  
 }
 
 

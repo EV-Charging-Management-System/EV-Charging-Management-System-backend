@@ -17,24 +17,22 @@ class VnpayController {
   // Create a VNPAY payment URL (no DB insert yet)
   createPaymentUrl = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      // Only accept fields: user (userId) and amount. orderInfo optional for display.
-      const { user, amount, orderInfo } = req.body as {
-        user?: number
-        amount?: number
+      const { sessionId, invoiceId, amount, orderInfo } = req.body as {
+        sessionId?: number
+        invoiceId?: number
+        amount: number
         orderInfo?: string
       }
+      const userId = req.user?.userId
 
-      // Fallback to authenticated user if not provided explicitly
-      const userId = user ?? req.user?.userId
-
-      if (!userId || !amount || Number(amount) <= 0) {
-        res.status(400).json({ message: "Missing required fields (need user and amount)" })
+      if (!userId || !amount || (!sessionId && !invoiceId)) {
+        res.status(400).json({ message: "Missing required fields (need amount and either sessionId or invoiceId)" })
         return
       }
 
-      // Generate a generic transaction ref not bound to session/invoice
-      const txnRef = `U_${userId}_${Date.now()}`
-      const info = orderInfo || `Nap tien cho user ${userId}`
+      const targetPrefix = sessionId ? `S_${sessionId}` : `I_${invoiceId}`
+  const txnRef = `${targetPrefix}_${userId}_${Date.now()}`
+      const info = orderInfo || (sessionId ? `Thanh toan phien sac ${sessionId}` : `Thanh toan hoa don ${invoiceId}`)
 
       const url = buildVnpUrl({ amount, orderInfo: info, txnRef, ipAddr: getClientIp(req) })
       res.status(200).json({ data: { url, txnRef }, message: "VNPAY URL created" })
@@ -54,17 +52,13 @@ class VnpayController {
     // Do not update DB here; rely on IPN for final status. Just inform client.
     if (responseCode === '00') {
     // Thanh toán thành công
-    const ref = encodeURIComponent(txnRef || '')
-    return res.redirect(`http://localhost:3000/payment-success?code=${responseCode}&txnRef=${ref}`);
+    return res.redirect(`http://localhost:3000/payment-success?code=${responseCode}`);
   } else {
     // Thanh toán thất bại
-    const ref = encodeURIComponent(txnRef || '')
-    return res.redirect(`http://localhost:3000/payment-fail?code=${responseCode}&txnRef=${ref}`);
+    return res.redirect(`http://localhost:3000/payment-fail?code=${responseCode}`);
   }
   })
-  //thằng phú mới là thằng bịp m đó
-  //đéo có thằng nào mà vnpay return lại để vào res.json đâu
-  // chúc em may mắn :3 <3
+  
 
   // VNPAY IPN (server-to-server). Update DB status here.
   vnpIpn = asyncHandler(async (req: Request, res: Response): Promise<void> => {
@@ -95,10 +89,6 @@ class VnpayController {
             sessionId = Number(parts[1]) || null
           } else if (parts[0] === "I") {
             invoiceId = Number(parts[1]) || null
-          } else if (parts[0] === "U") {
-            // Generic user payment (top-up). No session/invoice
-            sessionId = null
-            invoiceId = null
           }
           userId = Number(parts[2]) || null
         }

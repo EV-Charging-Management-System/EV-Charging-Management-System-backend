@@ -184,47 +184,47 @@ const checkoutTime = now.toISOString().slice(0, 19).replace('T', ' ')
     }
   }
 
-  async addPenalty(sessionId: number, penaltyFee: number): Promise<void> {
-    const pool = await getDbPool()
-    try {
-      await pool
-        .request()
-        .input("SessionId", sessionId)
-        .input("PenaltyFee", penaltyFee)
-        .query(`
-          UPDATE [ChargingSession] SET PenaltyFee = @PenaltyFee WHERE SessionId = @SessionId
-        `)
-    } catch (error) {
-      throw new Error("Error adding penalty")
-    }
-  }
+  // async addPenalty(sessionId: number, penaltyFee: number): Promise<void> {
+  //   const pool = await getDbPool()
+  //   try {
+  //     await pool
+  //       .request()
+  //       .input("SessionId", sessionId)
+  //       .input("PenaltyFee", penaltyFee)
+  //       .query(`
+  //         UPDATE [ChargingSession] SET PenaltyFee = @PenaltyFee WHERE SessionId = @SessionId
+  //       `)
+  //   } catch (error) {
+  //     throw new Error("Error adding penalty")
+  //   }
+  // }
 
-  async calculateSessionPrice(sessionId: number, discountPercent = 0): Promise<number> {
-    const pool = await getDbPool()
-    try {
-      const result = await pool
-        .request()
-        .input("SessionId", sessionId)
-        .query(`
-          SELECT 
-            DATEDIFF(MINUTE, CheckinTime, CheckoutTime) as DurationMinutes,
-            PortTypeOfKwh
-          FROM [ChargingSession] cs
-          JOIN [ChargingPort] cp ON cs.VehicleId = cp.PortId
-          WHERE cs.SessionId = @SessionId
-        `)
+  // async calculateSessionPrice(sessionId: number, discountPercent = 0): Promise<number> {
+  //   const pool = await getDbPool()
+  //   try {
+  //     const result = await pool
+  //       .request()
+  //       .input("SessionId", sessionId)
+  //       .query(`
+  //         SELECT 
+  //           DATEDIFF(MINUTE, CheckinTime, CheckoutTime) as DurationMinutes,
+  //           PortTypeOfKwh
+  //         FROM [ChargingSession] cs
+  //         JOIN [ChargingPort] cp ON cs.VehicleId = cp.PortId
+  //         WHERE cs.SessionId = @SessionId
+  //       `)
 
-      if (result.recordset.length === 0) return 0
+  //     if (result.recordset.length === 0) return 0
 
-      const { DurationMinutes, PortTypeOfKwh } = result.recordset[0]
-      const basePrice = (DurationMinutes / 60) * PortTypeOfKwh * 1000
-      const discountedPrice = basePrice * (1 - discountPercent / 100)
+  //     const { DurationMinutes, PortTypeOfKwh } = result.recordset[0]
+  //     const basePrice = (DurationMinutes / 60) * PortTypeOfKwh * 1000
+  //     const discountedPrice = basePrice * (1 - discountPercent / 100)
 
-      return discountedPrice
-    } catch (error) {
-      throw new Error("Error calculating session price")
-    }
-  }
+  //     return discountedPrice
+  //   } catch (error) {
+  //     throw new Error("Error calculating session price")
+  //   }
+  // }
   async generateInvoiceService(sessionId: number, userId: number): Promise<any> {
     const pool = await getDbPool()
     try {
@@ -240,6 +240,76 @@ const checkoutTime = now.toISOString().slice(0, 19).replace('T', ' ')
         .query(`INSERT INTO [Invoice] (UserId, SessionId, CompanyId, TotalAmount,PaidStatus) VALUES (@UserId, @SessionId, @CompanyId, @Amount,@Status)`)
     } catch (error) {
       throw new Error("Error generating invoice")
+    }
+  }
+
+  async startSessionForGuest(stationId: number, pointId: number, portId: number, batteryPercentage: number): Promise<any> {
+    const pool = await getDbPool()
+    try {
+ 
+         const now = new Date(Date.now() + 7 * 60 * 60 * 1000)
+const checkinTime = now.toISOString().slice(0, 19).replace('T', ' ')
+      const chargingStatus = "ONGOING"
+      const Battery = 250; // Giả sử pin đầy là 250 kWh
+      const port = await pool.request().input("PortId", portId).query("SELECT * FROM [ChargingPort] WHERE PortId = @PortId")
+      const kwh = port.recordset[0]?.PortTypeOfKwh
+      const totaltime = Math.round((Battery - (Battery * batteryPercentage/100))/kwh)
+     // Giả sử mỗi phần trăm pin tương ứng với 0.5 giờ sạc
+      const result = await pool
+        .request()
+        .input("StationId", stationId)
+        .input("PointId", pointId)
+        .input("PortId", portId)
+        .input("TotalTime", totaltime)
+        .input("CheckinTime", checkinTime)
+        .input("ChargingStatus", chargingStatus)
+        .input("BatteryPercentage", batteryPercentage)
+        .input("Status", 1)
+        .query(`
+          INSERT INTO [ChargingSession] (StationId, PointId, PortId, CheckinTime, ChargingStatus, TotalTime, BatteryPercentage, Status)
+          OUTPUT INSERTED.SessionId
+          VALUES (@StationId, @PointId, @PortId, @CheckinTime, @ChargingStatus, @TotalTime, @BatteryPercentage, @Status)
+        `)
+
+      return { sessionId: result.recordset[0].SessionId, checkinTime, chargingStatus }
+    } catch (error) {
+      throw new Error("Error starting charging session: " + error)
+    }
+  }
+  async startSessionStaff(stationId: number, pointId: number, portId: number, licensePlate: string, batteryPercentage: number): Promise<any> {
+    const pool = await getDbPool()
+    try {
+      
+      const now = new Date(Date.now() + 7 * 60 * 60 * 1000)
+      const checkinTime = now.toISOString().slice(0, 19).replace('T', ' ')
+      const chargingStatus = "ONGOING"
+      const X = await pool.request().input("licensePlate", licensePlate).query("SELECT * FROM [Vehicle] WHERE LicensePlate = @LicensePlate")
+      const Battery = X.recordset[0]?.Battery
+      const port = await pool.request().input("PortId", portId).query("SELECT * FROM [ChargingPort] WHERE PortId = @PortId")
+      const kwh = port.recordset[0]?.PortTypeOfKwh
+      const totaltime = Math.round((Battery - (Battery * batteryPercentage/100))/kwh)
+     // Giả sử mỗi phần trăm pin tương ứng với 0.5 giờ sạc
+      const result = await pool
+        
+        .request()
+        .input("VehicleId", X.recordset[0]?.VehicleId)
+        .input("StationId", stationId)
+        .input("PointId", pointId)
+        .input("PortId", portId)
+        .input("TotalTime", totaltime)
+        .input("CheckinTime", checkinTime)
+        .input("ChargingStatus", chargingStatus)
+        .input("BatteryPercentage", batteryPercentage)
+        .input("Status", 1)
+        .query(`
+          INSERT INTO [ChargingSession] (StationId, PointId, PortId, CheckinTime, ChargingStatus, TotalTime, BatteryPercentage, Status, VehicleId)
+          OUTPUT INSERTED.SessionId
+          VALUES (@StationId, @PointId, @PortId, @CheckinTime, @ChargingStatus, @TotalTime, @BatteryPercentage, @Status, @VehicleId)
+        `)
+
+      return { sessionId: result.recordset[0].SessionId, checkinTime, chargingStatus }
+    } catch (error) {
+      throw new Error("Error starting charging session: " + error)
     }
   }
 }
