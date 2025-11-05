@@ -6,7 +6,7 @@ const router = Router()
 
 router.post("/start", authenticate, authorize(["EVDRIVER","BUSINESS"]), chargingSessionController.startSession)
 router.patch("/:id/end", authenticate, authorize(["EVDRIVER","BUSINESS"]), chargingSessionController.endSession)
-router.post("/:id/invoice", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), chargingSessionController.generateInvoice)
+// router.post("/:id/invoice", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), chargingSessionController.generateInvoice)
 router.get("/:id", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), chargingSessionController.getSessionDetails)
 router.get("/my/sessions", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), chargingSessionController.getUserSessions)
 router.get("/company/:companyId", authenticate, authorize(["BUSINESS"]), chargingSessionController.getCompanySessions)
