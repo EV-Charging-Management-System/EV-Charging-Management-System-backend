@@ -7,11 +7,7 @@ export class BusinessController {
   // 🟢 Gửi yêu cầu nâng cấp tài khoản doanh nghiệp
   async requestUpgrade(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-<<<<<<< Updated upstream
-      const userId = req.user?.userId; // ✅ Lấy từ token, giống adminController
-=======
       const userId = req.user?.userId; // ✅ Lấy từ token
->>>>>>> Stashed changes
       if (!userId) {
         res.status(401).json({ success: false, message: "Người dùng chưa đăng nhập!" });
         return;
@@ -37,25 +33,11 @@ export class BusinessController {
         return;
       }
 
-<<<<<<< Updated upstream
-      if (user.RoleName === "PENDING_BUSINESS") {
-=======
       if (user.Status === "PENDING") {
->>>>>>> Stashed changes
         res.status(400).json({ success: false, message: "Yêu cầu nâng cấp đang chờ duyệt!" });
         return;
       }
 
-<<<<<<< Updated upstream
-      // 🔹 Cập nhật RoleName sang chờ duyệt
-      await pool
-        .request()
-        .input("UserId", Int, userId)
-        .input("RoleName", NVarChar(50), "PENDING_BUSINESS")
-        .query(`
-          UPDATE [User]
-          SET RoleName = @RoleName
-=======
       // 🔹 Cập nhật trạng thái sang chờ duyệt (thay vì đổi RoleName)
       await pool
         .request()
@@ -64,7 +46,6 @@ export class BusinessController {
         .query(`
           UPDATE [User]
           SET Status = @Status
->>>>>>> Stashed changes
           WHERE UserId = @UserId
         `);
 
@@ -78,11 +59,7 @@ export class BusinessController {
     }
   }
 
-<<<<<<< Updated upstream
-  // 🟣 (Tuỳ chọn) Lấy thông tin doanh nghiệp hiện tại
-=======
   // 🟣 Lấy thông tin doanh nghiệp hiện tại
->>>>>>> Stashed changes
   async getBusinessProfile(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = req.user?.userId;
@@ -96,30 +73,19 @@ export class BusinessController {
         .request()
         .input("UserId", Int, userId)
         .query(`
-<<<<<<< Updated upstream
-          SELECT 
-=======
           SELECT
->>>>>>> Stashed changes
             u.UserId,
             u.UserName,
             u.Mail,
             u.RoleName,
-<<<<<<< Updated upstream
-=======
             u.Status, -- ✅ thêm cột Status
->>>>>>> Stashed changes
             c.CompanyId,
             c.CompanyName,
             c.Address,
             c.Phone,
             c.Mail AS CompanyMail
           FROM [User] u
-<<<<<<< Updated upstream
-          LEFT JOIN [Company] c ON u.CompanyId = c.CompanyId
-=======
             LEFT JOIN [Company] c ON u.CompanyId = c.CompanyId
->>>>>>> Stashed changes
           WHERE u.UserId = @UserId
         `);
 
