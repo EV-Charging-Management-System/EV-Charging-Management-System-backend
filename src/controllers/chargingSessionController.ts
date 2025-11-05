@@ -138,14 +138,14 @@ export class ChargingSessionController {
 
   async startSessionForGuest(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { stationId, pointId, portId, licensePlate, battery, batteryPercentage } = req.body
+      const { stationId, pointId, portId, battery, batteryPercentage } = req.body
 
-      if (!stationId || !pointId || !portId || batteryPercentage === undefined) {
+      if (!stationId || !pointId || !portId || battery === undefined || batteryPercentage === undefined) {
         res.status(400).json({ message: "Missing required fields" })
         return
       }
 
-      const session = await chargingSessionService.startSessionForGuest(stationId, pointId, portId, licensePlate)
+      const session = await chargingSessionService.startSessionForGuest(stationId, pointId, portId, battery, batteryPercentage)
       res.status(201).json({ success: true, data: session })
     } catch (error) {
       next(error)
@@ -160,7 +160,19 @@ export class ChargingSessionController {
       next(error)
     }
   }
-  
+  async getSessionDetailsGuest(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params
+      const session = await chargingSessionService.getSessionDetailsGuest(Number(id))
+      if (!session) {
+        res.status(404).json({ message: "Session not found" })
+        return
+      }
+      res.json({ success: true, data: session })
+    } catch (error) {
+      next(error)
+    }
+  }
 }
 
 
