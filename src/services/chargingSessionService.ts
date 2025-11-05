@@ -243,17 +243,17 @@ const checkoutTime = now.toISOString().slice(0, 19).replace('T', ' ')
     }
   }
 
-  async startSessionForGuest(stationId: number, pointId: number, portId: number, batteryPercentage: number): Promise<any> {
+  async startSessionForGuest(stationId: number, pointId: number, portId: number, battery : number, batteryPercentage: number): Promise<any> {
     const pool = await getDbPool()
     try {
  
-         const now = new Date(Date.now() + 7 * 60 * 60 * 1000)
-const checkinTime = now.toISOString().slice(0, 19).replace('T', ' ')
+      const now = new Date(Date.now() + 7 * 60 * 60 * 1000)
+      const checkinTime = now.toISOString().slice(0, 19).replace('T', ' ')
       const chargingStatus = "ONGOING"
       const Battery = 250; // Giả sử pin đầy là 250 kWh
       const port = await pool.request().input("PortId", portId).query("SELECT * FROM [ChargingPort] WHERE PortId = @PortId")
       const kwh = port.recordset[0]?.PortTypeOfKwh
-      const totaltime = Math.round((Battery - (Battery * batteryPercentage/100))/kwh)
+      const totaltime = Math.round((battery - (battery * batteryPercentage/100))/kwh)
      // Giả sử mỗi phần trăm pin tương ứng với 0.5 giờ sạc
       const result = await pool
         .request()
@@ -312,5 +312,20 @@ const checkinTime = now.toISOString().slice(0, 19).replace('T', ' ')
       throw new Error("Error starting charging session: " + error)
     }
   }
+ 
+  async getSessionDetailsGuest(sessionId: number): Promise<any> {
+    const pool = await getDbPool()
+    try {
+      const result = await pool.request().input("SessionId", sessionId)
+      .query(`SELECT * FROM [ChargingSession] WHERE SessionId = @SessionId`)
+      await pool
+        .request()
+        .input("SessionId", sessionId)
+        return result.recordset[0]
+    } catch (error) {
+      throw new Error("Error generating invoice")
+    }
+  }
+  
 }
 export const chargingSessionService = new ChargingSessionService()
