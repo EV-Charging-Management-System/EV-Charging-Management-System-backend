@@ -172,14 +172,24 @@ export const getCurrentUserInfo = async (req: AuthRequest, res: Response): Promi
       .input("userId", user.userId)
       .query(`
         SELECT
-          UserId AS userId,
-          Mail AS email,
-          RoleName AS role,
-          UserName AS fullName,
-          CompanyId AS companyId,
-          IsPremium AS isPremium  -- ✅ thêm cột này
-        FROM [User]
-        WHERE UserId = @userId
+          u.UserId AS userId,
+          u.Mail AS email,
+          u.RoleName AS role,
+          u.UserName AS fullName,
+          u.CompanyId AS companyId,
+          CASE WHEN EXISTS (
+            SELECT 1
+            FROM Subscription s
+            WHERE s.UserId = u.UserId
+              AND s.SubStatus = 'ACTIVE'
+              AND DATEADD(
+                    month,
+                    TRY_CONVERT(int, s.DurationMonth),
+                    TRY_CONVERT(date, s.StartDate)
+                  ) >= CONVERT(date, GETDATE())
+          ) THEN 1 ELSE 0 END AS isPremium
+        FROM [User] u
+        WHERE u.UserId = @userId
       `);
 
     if (result.recordset.length === 0) {

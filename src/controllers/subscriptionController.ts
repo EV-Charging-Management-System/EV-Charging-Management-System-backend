@@ -45,7 +45,7 @@ class SubscriptionController {
         SELECT TOP 1 *
         FROM [Subscription]
         WHERE UserId = @UserId
-        ORDER BY PaymentDate DESC;
+        ORDER BY StartDate DESC;
       `);
 
     const sub = result.recordset[0];
@@ -64,7 +64,7 @@ class SubscriptionController {
     expireDate.setMonth(startDate.getMonth() + Number(sub.DurationMonth));
 
     const now = new Date();
-    let subStatus = sub.SubStatus; // ✅ đổi Status → SubStatus
+    let subStatus = sub.SubStatus;
     if (subStatus === "ACTIVE" && now > expireDate) {
       subStatus = "EXPIRED";
 
@@ -82,15 +82,10 @@ class SubscriptionController {
       data: {
         SubscriptionId: sub.SubscriptionId,
         PackageId: sub.PackageId,
-        SubStatus: subStatus, // ✅ dùng SubStatus
-        PaymentMethod: sub.PaymentMethod,
-        TxnRef: sub.TxnRef,
+        SubStatus: subStatus,
         StartDate: sub.StartDate,
-        PaymentDate: sub.PaymentDate,
         DurationMonth: sub.DurationMonth,
-        DepositAmount: sub.DepositAmount,
-        IsDeposited: sub.IsDeposited,
-        ExpireDate: expireDate, // 👈 thêm ngày hết hạn cho FE
+        ExpireDate: expireDate, 
       },
     });
   });
@@ -119,7 +114,7 @@ class SubscriptionController {
       throw createError("Không thể tạo Subscription — kiểm tra subscriptionService.createSubscription()", 500);
     }
 
-    // 🧩 2️⃣ Sinh mã giao dịch + link VNPay
+  // 🧩 2️⃣ Sinh mã giao dịch + link VNPay
     const txnRef = `SUB_${created.SubscriptionId}_${userId}_${Date.now()}`;
     const orderInfo = `Thanh toán gói Premium #${created.SubscriptionId}`;
     const amount = 299000; // 💰 giá cố định
@@ -132,12 +127,7 @@ class SubscriptionController {
       ipAddr: ipAddr.replace("::ffff:", ""),
     });
 
-    // 🧩 3️⃣ Cập nhật lại Subscription sau khi có TxnRef
-    await subscriptionService.updateSubscription(created.SubscriptionId, {
-      PaymentMethod: "VNPAY",
-      TxnRef: txnRef,
-      SubStatus: "PENDING", // ✅ đổi Status → SubStatus
-    });
+    // 🧩 3️⃣ (Optional) Persist TxnRef/PaymentMethod — skipped due to current DB schema
 
     // 🧩 4️⃣ Trả kết quả về FE
     res.status(201).json({

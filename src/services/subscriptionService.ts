@@ -1,6 +1,6 @@
 import { Int, NVarChar, Date as SqlDate } from "mssql";
 import { getDbPool } from "../config/database";
-import { buildVnpUrl } from "../utils/vnpay"; // ✅ Dùng util VNPay có sẵn
+import { buildVnpUrl } from "../utils/vnpay"; 
 
 class SubscriptionService {
   // 🔹 Lấy tất cả gói Subscription
@@ -57,16 +57,15 @@ class SubscriptionService {
         .input("UserId", Int, UserId)
         .input("CompanyId", Int, CompanyId)
         .input("PackageId", Int, PackageId)
-        .input("StartMonth", NVarChar(100), StartMonth ?? "") // ✅ fix null → ""
+        .input("StartMonth", NVarChar(100), StartMonth ?? "") 
         .input("StartDate", SqlDate, StartDate)
-        .input("DurationMonth", NVarChar(100), DurationMonth ?? "") // ✅ fix null → ""
-        .input("PaymentMethod", NVarChar(50), "VNPAY")
+        .input("DurationMonth", NVarChar(100), DurationMonth ?? "") 
         .input("SubStatus", NVarChar(20), "PENDING")
         .query(`
           INSERT INTO [Subscription]
-          (UserId, CompanyId, PackageId, StartMonth, StartDate, DurationMonth, PaymentMethod, SubStatus)
+          (UserId, CompanyId, PackageId, StartMonth, StartDate, DurationMonth, SubStatus)
             OUTPUT INSERTED.*
-          VALUES (@UserId, @CompanyId, @PackageId, @StartMonth, @StartDate, @DurationMonth, @PaymentMethod, @SubStatus)
+          VALUES (@UserId, @CompanyId, @PackageId, @StartMonth, @StartDate, @DurationMonth, @SubStatus)
         `);
 
       const subscription = insertResult.recordset[0];
@@ -83,12 +82,7 @@ class SubscriptionService {
         ipAddr: IpAddr,
       });
 
-      // 4️⃣ Cập nhật lại TxnRef vào DB
-      await pool
-        .request()
-        .input("SubscriptionId", Int, subscription.SubscriptionId)
-        .input("TxnRef", NVarChar(50), txnRef)
-        .query(`UPDATE [Subscription] SET TxnRef = @TxnRef WHERE SubscriptionId = @SubscriptionId`);
+      // 4️⃣ (Optional) Persist TxnRef in DB — skipped due to current schema without TxnRef column
 
       // 5️⃣ Trả kết quả cho FE
       return {
@@ -127,8 +121,6 @@ class SubscriptionService {
       const StartMonth = data.StartMonth ?? existing.StartMonth;
       const StartDate = data.StartDate ?? existing.StartDate;
       const DurationMonth = data.DurationMonth ?? existing.DurationMonth;
-      const PaymentMethod = data.PaymentMethod ?? existing.PaymentMethod;
-      const TxnRef = data.TxnRef ?? existing.TxnRef;
       const SubStatus = data.SubStatus ?? existing.SubStatus;
 
       const result = await pool
@@ -137,11 +129,9 @@ class SubscriptionService {
         .input("UserId", Int, UserId)
         .input("CompanyId", Int, CompanyId)
         .input("PackageId", Int, PackageId)
-        .input("StartMonth", NVarChar(100), StartMonth ?? "") // ✅ fix null → ""
+        .input("StartMonth", NVarChar(100), StartMonth ?? "") 
         .input("StartDate", SqlDate, StartDate)
-        .input("DurationMonth", NVarChar(100), String(DurationMonth ?? ""))// ✅ fix null → ""
-        .input("PaymentMethod", NVarChar(50), PaymentMethod)
-        .input("TxnRef", NVarChar(50), TxnRef)
+        .input("DurationMonth", NVarChar(100), String(DurationMonth ?? ""))
         .input("SubStatus", NVarChar(20), SubStatus)
         .query(`
           UPDATE [Subscription]
@@ -152,8 +142,6 @@ class SubscriptionService {
             StartMonth = @StartMonth,
             StartDate = @StartDate,
             DurationMonth = @DurationMonth,
-            PaymentMethod = @PaymentMethod,
-            TxnRef = @TxnRef,
             SubStatus = @SubStatus
             OUTPUT INSERTED.*
           WHERE SubscriptionId = @SubscriptionId
