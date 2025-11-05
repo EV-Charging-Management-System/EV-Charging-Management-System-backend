@@ -19,24 +19,31 @@ class VnpayController {
       const { subscriptionId, amount, orderInfo } = req.body;
       const userId = req.user?.userId;
 
-      if (!userId || !subscriptionId || !amount) {
+      // Now subscriptionId is optional — require only userId and amount
+      if (!userId || !amount) {
         res.status(400).json({
           success: false,
-          message: "Thiếu thông tin: cần subscriptionId, amount và userId.",
+          message: "Thiếu thông tin: cần amount và userId.",
         });
         return;
       }
 
-      const txnRef = `SUB_${subscriptionId}_${userId}_${Date.now()}`;
+      // Normalize subscriptionId to a number or null
+      const subscriptionIdNum: number | null = subscriptionId ? Number(subscriptionId) : null;
+
+      // Keep the TxnRef prefix 'SUB_' so downstream checks still work.
+      // When subscriptionId is absent, use 'GEN' as a placeholder.
+      const txnRef = `SUB_${subscriptionIdNum ?? "GEN"}_${userId}_${Date.now()}`;
       const info = orderInfo || "Thanh toán gói Premium";
 
       const pool = await getDbPool();
 
       // 🧾 Ghi record Subscription trước khi redirect VNPay
+      // Allow PackageId to be NULL when subscriptionId wasn't provided
       await pool
         .request()
         .input("UserId", Int, userId)
-        .input("PackageId", Int, subscriptionId)
+        .input("PackageId", Int, subscriptionIdNum)
         .input("TxnRef", NVarChar(100), txnRef)
         .input("DepositAmount", Decimal(18, 2), amount)
         .input("SubStatus", NVarChar(50), "PENDING") // ✅ đổi Status → SubStatus
