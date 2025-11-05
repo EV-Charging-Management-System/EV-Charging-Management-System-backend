@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 import { Router } from 'express'
 import { authenticate, authorize } from '../middlewares/authMiddleware'
 import { stationController } from '../controllers/StationController'
@@ -9,3 +10,14 @@ router.get('/getAllStations', authenticate, authorize(['ADMIN','BUSINESS','STAFF
 router.get('/getPoint', authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER']), stationController.GetPoint)
 router.get('/getPort', authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER']), stationController.GetPort)
 export { router as stationRoutes }
+=======
+import { Router } from 'express'
+import { authenticate, authorize } from '../middlewares/authMiddleware'
+import { stationController } from '../controllers/StationController'
+
+const router = Router()
+
+router.get('/getStationinfor', authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER']), stationController.GetStatusStation)
+router.get('/getAllStations', authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER']), stationController.GetAllStations)
+export { router as stationRoutes }
+>>>>>>> Stashed changes
