@@ -28,6 +28,36 @@ export class AdminService {
     }
   }
 
+  // 🏢 Lấy chi tiết một yêu cầu duyệt doanh nghiệp theo UserId
+  async getPendingBusinessApprovalById(userId: number): Promise<any | null> {
+    const pool = await getDbPool();
+    try {
+      const result = await pool
+        .request()
+        .input("userId", userId)
+        .query(`
+          SELECT
+            u.UserId,
+            u.UserName,
+            u.Mail,
+            u.CompanyId,
+            c.CompanyName,
+            c.Address,
+            c.Phone,
+            c.Mail AS CompanyMail
+          FROM [User] u
+            LEFT JOIN [Company] c ON u.CompanyId = c.CompanyId
+          WHERE u.UserId = @userId
+            AND u.CompanyId IS NOT NULL
+            AND u.RoleName <> 'BUSINESS'
+        `);
+      return result.recordset[0] || null;
+    } catch (error) {
+      console.error("❌ Error fetching pending approval by id:", error);
+      throw new Error("Error fetching pending approval by id");
+    }
+  }
+
   // ✅ Duyệt doanh nghiệp
   async approveBusiness(userId: number): Promise<void> {
     const pool = await getDbPool();

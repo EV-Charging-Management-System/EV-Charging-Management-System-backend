@@ -58,12 +58,48 @@ export class BusinessController {
       const userId = bodyUserId || tokenUserId;
 
       if (!userId) {
-        res.status(401).json({ error: "Unauthorized" });
+        res.status(401).json({ success: false, error: "Unauthorized: missing or invalid token", code: "AUTH_REQUIRED" });
         return;
       }
-      if (!companyName) {
-        res.status(400).json({ error: "Company name is required" });
+
+      const name = (companyName ?? "").toString().trim();
+      const addr = address?.toString().trim();
+      const email = mail?.toString().trim();
+      const phoneNum = phone?.toString().trim();
+
+      if (!name) {
+        res.status(400).json({ success: false, error: "companyName is required", code: "VALIDATION_ERROR", field: "companyName" });
         return;
+      }
+      if (name.length > 100) {
+        res.status(400).json({ success: false, error: "companyName must be at most 100 characters", code: "VALIDATION_ERROR", field: "companyName" });
+        return;
+      }
+      if (addr && addr.length > 100) {
+        res.status(400).json({ success: false, error: "address must be at most 100 characters", code: "VALIDATION_ERROR", field: "address" });
+        return;
+      }
+      if (email && email.length > 100) {
+        res.status(400).json({ success: false, error: "mail must be at most 100 characters", code: "VALIDATION_ERROR", field: "mail" });
+        return;
+      }
+      if (phoneNum && phoneNum.length > 100) {
+        res.status(400).json({ success: false, error: "phone must be at most 100 characters", code: "VALIDATION_ERROR", field: "phone" });
+        return;
+      }
+      if (email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          res.status(400).json({ success: false, error: "Invalid email format", code: "VALIDATION_ERROR", field: "mail" });
+          return;
+        }
+      }
+      if (phoneNum) {
+        const phoneRegex = /^\+?[0-9\-\s]{8,20}$/;
+        if (!phoneRegex.test(phoneNum)) {
+          res.status(400).json({ success: false, error: "Invalid phone format", code: "VALIDATION_ERROR", field: "phone" });
+          return;
+        }
       }
 
       const pool = await getDbPool();
@@ -72,22 +108,66 @@ export class BusinessController {
       const userRs = await pool
         .request()
         .input("UserId", Int, userId)
-        .query(`SELECT UserId, RoleName, CompanyId FROM [User] WHERE UserId = @UserId`);
+        .query(`
+          SELECT u.UserId, u.RoleName, u.CompanyId, c.CompanyName
+          FROM [User] u
+          LEFT JOIN [Company] c ON u.CompanyId = c.CompanyId
+          WHERE u.UserId = @UserId
+        `);
       const user = userRs.recordset[0];
       if (!user) {
-        res.status(404).json({ error: "User not found" });
+        res.status(404).json({ success: false, error: "User not found", code: "USER_NOT_FOUND" });
         return;
       }
-      // If already a business and has a company, just return the existing company id
-      if (user.RoleName === "BUSINESS" && user.CompanyId) {
-        res.status(200).json({
-          message: "Company created successfully, waiting for admin approval",
-          companyId: user.CompanyId,
-        });
-        return;
-      }
-      // If already has a company (pending state), return the existing company id with the same success message
+      // If user already has a company (either pending or already business), update that company with provided data
       if (user.CompanyId) {
+        const isPersonal = !!user.CompanyName && user.CompanyName.toLowerCase().startsWith("personal");
+        if (isPersonal) {
+          // Treat as no company: create a real company and reassign
+          const dup = await pool
+            .request()
+            .input("CompanyName", NVarChar(100), name)
+            .query(`SELECT TOP 1 CompanyId FROM [Company] WHERE CompanyName = @CompanyName`);
+          if (dup.recordset.length > 0) {
+            res.status(409).json({ success: false, error: "Company name already exists", code: "COMPANY_CONFLICT" });
+            return;
+          }
+          const newCompany = await companyService.createCompany({
+            CompanyName: name,
+            Address: addr,
+            Mail: email,
+            Phone: phoneNum,
+          });
+          await pool
+            .request()
+            .input("UserId", Int, userId)
+            .input("CompanyId", Int, newCompany.CompanyId)
+            .query(`UPDATE [User] SET CompanyId = @CompanyId WHERE UserId = @UserId`);
+
+          res.status(200).json({
+            message: "Company created successfully, waiting for admin approval",
+            companyId: newCompany.CompanyId,
+          });
+          return;
+        }
+        // Optional: prevent duplicate name with other companies
+        const dupUpdate = await pool
+          .request()
+          .input("CompanyName", NVarChar(100), name)
+          .input("CompanyId", Int, user.CompanyId)
+          .query(`SELECT TOP 1 CompanyId FROM [Company] WHERE CompanyName = @CompanyName AND CompanyId <> @CompanyId`);
+        if (dupUpdate.recordset.length > 0) {
+          res.status(409).json({ success: false, error: "Company name already exists", code: "COMPANY_CONFLICT" });
+          return;
+        }
+
+        await companyService.updateCompany(user.CompanyId, {
+          CompanyName: name,
+          Address: addr,
+          Mail: email,
+          Phone: phoneNum,
+        });
+
         res.status(200).json({
           message: "Company created successfully, waiting for admin approval",
           companyId: user.CompanyId,
@@ -95,12 +175,22 @@ export class BusinessController {
         return;
       }
 
+      // Check duplicate company name
+      const dup = await pool
+        .request()
+        .input("CompanyName", NVarChar(100), name)
+        .query(`SELECT TOP 1 CompanyId FROM [Company] WHERE CompanyName = @CompanyName`);
+      if (dup.recordset.length > 0) {
+        res.status(409).json({ success: false, error: "Company name already exists", code: "COMPANY_CONFLICT" });
+        return;
+      }
+
       // Create company
       const newCompany = await companyService.createCompany({
-        CompanyName: companyName,
-        Address: address,
-        Mail: mail,
-        Phone: phone,
+        CompanyName: name,
+        Address: addr,
+        Mail: email,
+        Phone: phoneNum,
       });
 
       // Attach to user and set pending
@@ -140,7 +230,12 @@ export class BusinessController {
       const userRs = await pool
         .request()
         .input("UserId", Int, userId)
-        .query(`SELECT UserId, RoleName, CompanyId FROM [User] WHERE UserId = @UserId`);
+        .query(`
+          SELECT u.UserId, u.RoleName, u.CompanyId, c.CompanyName
+          FROM [User] u
+          LEFT JOIN [Company] c ON u.CompanyId = c.CompanyId
+          WHERE u.UserId = @UserId
+        `);
       const user = userRs.recordset[0];
       if (!user) {
         res.status(404).json({ error: "User not found" });
@@ -166,7 +261,8 @@ export class BusinessController {
         }
       }
 
-  if (user.CompanyId && user.RoleName === "BUSINESS") {
+      const isPersonal = !!user.CompanyName && user.CompanyName.toLowerCase().startsWith("personal");
+      if (user.CompanyId && user.RoleName === "BUSINESS" && !isPersonal) {
         // Assign to company
         const created = await companyService.addVehicleToCompany(
           user.CompanyId,
@@ -270,14 +366,20 @@ export class BusinessController {
       const userRs = await pool
         .request()
         .input("UserId", Int, userId)
-        .query(`SELECT UserId, RoleName, CompanyId FROM [User] WHERE UserId = @UserId`);
+        .query(`
+          SELECT u.UserId, u.RoleName, u.CompanyId, c.CompanyName
+          FROM [User] u
+          LEFT JOIN [Company] c ON u.CompanyId = c.CompanyId
+          WHERE u.UserId = @UserId
+        `);
       const user = userRs.recordset[0];
       if (!user) {
         res.status(404).json({ error: "User not found" });
         return;
       }
 
-      if (user.CompanyId && user.RoleName === "BUSINESS") {
+      const isPersonal = !!user.CompanyName && user.CompanyName.toLowerCase().startsWith("personal");
+      if (user.CompanyId && user.RoleName === "BUSINESS" && !isPersonal) {
         const rs = await pool
           .request()
           .input("CompanyId", Int, user.CompanyId)
@@ -319,7 +421,8 @@ export class BusinessController {
         `);
       const info = userRs.recordset[0];
 
-      if (!info?.CompanyId) {
+      const isPersonal = !!info?.CompanyName && info.CompanyName.toLowerCase().startsWith("personal");
+      if (!info?.CompanyId || isPersonal) {
         res.status(200).json({ totalPayments: 0, totalAmount: 0, currency: "VND", companyId: null, companyName: null });
         return;
       }

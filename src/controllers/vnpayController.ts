@@ -54,32 +54,18 @@ class VnpayController {
         const userRow = await pool
           .request()
           .input("UserId", Int, userId)
-          .query(`SELECT UserId, UserName, Mail, CompanyId FROM [User] WHERE UserId = @UserId`);
+          .query(`
+            SELECT u.CompanyId, c.CompanyName
+            FROM [User] u
+            LEFT JOIN [Company] c ON u.CompanyId = c.CompanyId
+            WHERE u.UserId = @UserId
+          `);
         let companyId: number | null = userRow.recordset[0]?.CompanyId ?? null;
+        const companyName: string | null = userRow.recordset[0]?.CompanyName ?? null;
 
-        // CompanyId is required (NOT NULL) on Subscription. If user has no company, create a personal company and assign it.
-        if (companyId === null || companyId === undefined) {
-          const displayName = userRow.recordset[0]?.UserName || `User-${userId}`;
-          const newCompany = await pool
-            .request()
-            .input("CompanyName", NVarChar(100), `Personal - ${displayName}`)
-            .query(`
-              INSERT INTO [Company] (CompanyName)
-                OUTPUT INSERTED.CompanyId
-              VALUES (@CompanyName)
-            `);
-          const newCompanyId: number | undefined = newCompany.recordset[0]?.CompanyId;
-          if (!newCompanyId) {
-            res.status(500).json({ success: false, message: "Không thể tạo Company mặc định cho người dùng." });
-            return;
-          }
-          // Update user to link this new company
-          await pool
-            .request()
-            .input("UserId", Int, userId)
-            .input("CompanyId", Int, newCompanyId)
-            .query(`UPDATE [User] SET CompanyId = @CompanyId WHERE UserId = @UserId`);
-          companyId = newCompanyId;
+        // Treat 'Personal' companies as NO company for subscription context
+        if (companyId && companyName && companyName.toLowerCase().startsWith("personal")) {
+          companyId = null;
         }
 
         // Create a PENDING subscription for this Package

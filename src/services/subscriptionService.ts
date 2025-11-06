@@ -51,41 +51,26 @@ class SubscriptionService {
         IpAddr = "127.0.0.1",
       } = data;
 
-      // Ensure CompanyId is set because DB column may be NOT NULL.
-      // If caller didn't provide CompanyId, try to read it from User table.
-      // If user has no company, create a personal company and assign it to the user.
+      // CompanyId is optional in the new schema. Treat any company with name starting 'Personal'
+      // as NO company (null) for subscription purposes.
       let finalCompanyId: number | null = CompanyId ?? null;
       if ((finalCompanyId === null || finalCompanyId === undefined) && UserId) {
         const userRow = await pool
           .request()
           .input("UserId", Int, UserId)
-          .query(`SELECT UserId, UserName, CompanyId FROM [User] WHERE UserId = @UserId`);
-        const existingCompanyId = userRow.recordset[0]?.CompanyId ?? null;
-        if (existingCompanyId) {
-          finalCompanyId = existingCompanyId;
+          .query(`
+            SELECT u.CompanyId, c.CompanyName
+            FROM [User] u
+            LEFT JOIN [Company] c ON u.CompanyId = c.CompanyId
+            WHERE u.UserId = @UserId
+          `);
+        const row = userRow.recordset[0];
+        const companyId = row?.CompanyId ?? null;
+        const companyName: string | null = row?.CompanyName ?? null;
+        if (companyId && companyName && companyName.toLowerCase().startsWith("personal")) {
+          finalCompanyId = null; // Treat as no company
         } else {
-          // create a personal company for this user
-          const displayName = userRow.recordset[0]?.UserName || `User-${UserId}`;
-          const newCompany = await pool
-            .request()
-            .input("CompanyName", NVarChar(100), `Personal - ${displayName}`)
-            .query(`
-              INSERT INTO [Company] (CompanyName)
-                OUTPUT INSERTED.CompanyId
-              VALUES (@CompanyName)
-            `);
-          const newCompanyId: number | undefined = newCompany.recordset[0]?.CompanyId;
-          if (newCompanyId) {
-            finalCompanyId = newCompanyId;
-            // update user to link this new company
-            await pool
-              .request()
-              .input("UserId", Int, UserId)
-              .input("CompanyId", Int, finalCompanyId)
-              .query(`UPDATE [User] SET CompanyId = @CompanyId WHERE UserId = @UserId`);
-          } else {
-            throw new Error("Unable to create default Company for user.");
-          }
+          finalCompanyId = companyId;
         }
       }
 
@@ -128,7 +113,7 @@ class SubscriptionService {
         TxnRef: txnRef,
         vnpUrl,
       };
-    } catch (error) {
+    } catch (error: any) {
       throw new Error("Error creating subscription: " + error);
     }
   }

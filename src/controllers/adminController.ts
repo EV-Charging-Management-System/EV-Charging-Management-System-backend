@@ -37,6 +37,21 @@ export class AdminController {
     }
   }
 
+  // 🏢 Lấy chi tiết một yêu cầu duyệt doanh nghiệp theo UserId
+  async getPendingBusinessApprovalById(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const data = await adminService.getPendingBusinessApprovalById(Number(id));
+      if (!data) {
+        res.status(404).json({ success: false, message: "Approval not found" });
+        return;
+      }
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // ✅ Duyệt tài khoản doanh nghiệp
   async approveBusiness(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {

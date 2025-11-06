@@ -12,6 +12,7 @@ router.get("/dashboard", adminController.getDashboardStats);
 
 // 🏢 Duyệt doanh nghiệp
 router.get("/approvals", adminController.getPendingBusinessApprovals);
+router.get("/approvals/:id", adminController.getPendingBusinessApprovalById);
 router.patch("/approvals/:id/approve", adminController.approveBusiness);
 router.patch("/approvals/:id/reject", adminController.rejectBusiness);
 router.put("/approve-business", adminController.approveBusinessByBody);
