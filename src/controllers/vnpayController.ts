@@ -121,7 +121,8 @@ class VnpayController {
         orderInfo: info,
         txnRef,
         ipAddr: getClientIp(req),
-        returnUrl: "http://localhost:5000/api/vnpay/return",
+        // Allow override from env to match VNPay dashboard
+        returnUrl: process.env.VNP_RETURN_API_URL || "http://localhost:5000/api/vnpay/return",
       });
 
       console.log("🔗 [VNPay] URL Generated:", vnpUrl);
@@ -129,6 +130,9 @@ class VnpayController {
       res.status(200).json({
         success: true,
         data: { url: vnpUrl, vnpUrl, txnRef },
+        // duplicate at top-level for clients reading res.url / res.txnRef
+        url: vnpUrl,
+        txnRef,
         message: "Tạo URL thanh toán VNPay thành công.",
       });
     } catch (error) {
@@ -151,7 +155,8 @@ class VnpayController {
 
     // On success: only activate subscription when txnRef has SUB_ prefix; ignore PAY_ for premium
     try {
-      if (isValid && responseCode === "00" && transactionStatus === "00" && txnRef) {
+      // VNPay Return may not always include vnp_TransactionStatus; success is primarily vnp_ResponseCode === '00'
+      if (isValid && responseCode === "00" && txnRef) {
         const pool = await getDbPool();
 
         if (txnRef.startsWith("SUB_")) {
@@ -186,7 +191,20 @@ class VnpayController {
       console.error("⚠️ [VNPay Return] Failed to update Subscription status:", e);
     }
 
-    const redirectUrl = `http://localhost:3000/vnpay-return?vnp_ResponseCode=${responseCode}&vnp_TransactionStatus=${transactionStatus}&vnp_TxnRef=${txnRef}&vnp_Amount=${amount}`;
+    // Redirect includes official VNPay params and FE-friendly aliases (code/txnRef)
+  // Redirect directly to PaymentSuccess by default so FE doesn't need to forward params
+  const feReturn = process.env.VNP_FE_RETURN_URL || "http://localhost:3000/payment-success";
+    const redirectUrl = `${feReturn}?` +
+      `vnp_ResponseCode=${responseCode ?? ""}` +
+      `&vnp_TransactionStatus=${transactionStatus ?? ""}` +
+      `&vnp_TxnRef=${txnRef ?? ""}` +
+      `&vnp_Amount=${amount}` +
+      // aliases for various FE handlers
+      `&responseCode=${responseCode ?? ""}` +
+      `&transactionStatus=${transactionStatus ?? ""}` +
+      `&code=${responseCode ?? ""}` +
+      `&txnRef=${txnRef ?? ""}`;
+    console.log("🔁 [VNPay Return] Redirecting FE to:", redirectUrl);
     res.redirect(redirectUrl);
   });
 
