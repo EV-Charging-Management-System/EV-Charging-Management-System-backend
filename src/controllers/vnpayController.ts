@@ -5,11 +5,13 @@ import { buildVnpUrl, verifyVnpReturn } from "../utils/vnpay";
 import { Int, NVarChar, Date as SqlDate } from "mssql";
 import { getDbPool } from "../config/database";
 
-// 🔹 Hàm lấy IP thật của client (có proxy)
+// 🔹 Hàm lấy IP thật của client (có proxy) + chuẩn hóa IPv6 loopback về IPv4
 const getClientIp = (req: Request): string => {
   const xff = req.headers["x-forwarded-for"];
-  if (typeof xff === "string" && xff.length > 0) return xff.split(",")[0].trim();
-  return (req.socket.remoteAddress || "127.0.0.1").replace("::ffff:", "");
+  let ip = typeof xff === "string" && xff.length > 0 ? xff.split(",")[0].trim() : (req.socket.remoteAddress || "127.0.0.1");
+  ip = ip.replace("::ffff:", "");
+  if (ip === "::1" || ip === "0:0:0:0:0:0:0:1") ip = "127.0.0.1";
+  return ip;
 };
 
 class VnpayController {
@@ -30,7 +32,8 @@ class VnpayController {
         return;
       }
 
-      const info = orderInfo || "Thanh toán gói Premium";
+  // Nếu là flow subscription (có packageId) → dùng premium text; ngược lại mặc định là đặt cọc
+  const info = orderInfo || (packageIdFromFe !== undefined ? "Thanh toán gói Premium" : "Đặt cọc");
 
       const pool = await getDbPool();
 
@@ -125,7 +128,7 @@ class VnpayController {
 
       res.status(200).json({
         success: true,
-        data: { vnpUrl, txnRef },
+        data: { url: vnpUrl, vnpUrl, txnRef },
         message: "Tạo URL thanh toán VNPay thành công.",
       });
     } catch (error) {

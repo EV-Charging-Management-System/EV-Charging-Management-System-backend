@@ -93,11 +93,34 @@ export const loginHandler = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
+    // Enrich user info to include fullName/companyId/isPremium so FE can show full profile immediately
+    const pool = await getDbPool();
+    const profile = await pool
+      .request()
+      .input("userId", tokens.payload.userId)
+      .query(`
+        SELECT
+          u.UserId AS userId,
+          u.Mail AS email,
+          u.RoleName AS role,
+          u.UserName AS fullName,
+          u.CompanyId AS companyId,
+          u.IsPremium AS isPremium
+        FROM [User] u
+        WHERE u.UserId = @userId
+      `);
+
+    const user = profile.recordset[0] || {
+      userId: tokens.payload.userId,
+      email: tokens.payload.email,
+      role: tokens.payload.role,
+    };
+
     res.json({
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       success: true,
-      user: tokens.payload,
+      user,
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message || "Đăng nhập thất bại" });
@@ -177,17 +200,7 @@ export const getCurrentUserInfo = async (req: AuthRequest, res: Response): Promi
           u.RoleName AS role,
           u.UserName AS fullName,
           u.CompanyId AS companyId,
-          CASE WHEN EXISTS (
-            SELECT 1
-            FROM Subscription s
-            WHERE s.UserId = u.UserId
-              AND s.SubStatus = 'ACTIVE'
-              AND DATEADD(
-                    month,
-                    TRY_CONVERT(int, s.DurationMonth),
-                    TRY_CONVERT(date, s.StartDate)
-                  ) >= CONVERT(date, GETDATE())
-          ) THEN 1 ELSE 0 END AS isPremium
+          u.IsPremium AS isPremium
         FROM [User] u
         WHERE u.UserId = @userId
       `);
