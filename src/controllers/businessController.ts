@@ -121,35 +121,6 @@ export class BusinessController {
       }
       // If user already has a company (either pending or already business), update that company with provided data
       if (user.CompanyId) {
-        const isPersonal = !!user.CompanyName && user.CompanyName.toLowerCase().startsWith("personal");
-        if (isPersonal) {
-          // Treat as no company: create a real company and reassign
-          const dup = await pool
-            .request()
-            .input("CompanyName", NVarChar(100), name)
-            .query(`SELECT TOP 1 CompanyId FROM [Company] WHERE CompanyName = @CompanyName`);
-          if (dup.recordset.length > 0) {
-            res.status(409).json({ success: false, error: "Company name already exists", code: "COMPANY_CONFLICT" });
-            return;
-          }
-          const newCompany = await companyService.createCompany({
-            CompanyName: name,
-            Address: addr,
-            Mail: email,
-            Phone: phoneNum,
-          });
-          await pool
-            .request()
-            .input("UserId", Int, userId)
-            .input("CompanyId", Int, newCompany.CompanyId)
-            .query(`UPDATE [User] SET CompanyId = @CompanyId WHERE UserId = @UserId`);
-
-          res.status(200).json({
-            message: "Company created successfully, waiting for admin approval",
-            companyId: newCompany.CompanyId,
-          });
-          return;
-        }
         // Optional: prevent duplicate name with other companies
         const dupUpdate = await pool
           .request()
@@ -261,8 +232,7 @@ export class BusinessController {
         }
       }
 
-      const isPersonal = !!user.CompanyName && user.CompanyName.toLowerCase().startsWith("personal");
-      if (user.CompanyId && user.RoleName === "BUSINESS" && !isPersonal) {
+      if (user.CompanyId && user.RoleName === "BUSINESS") {
         // Assign to company
         const created = await companyService.addVehicleToCompany(
           user.CompanyId,
@@ -280,7 +250,7 @@ export class BusinessController {
         return;
       }
 
-      // Personal vehicle (no approved company)
+      // User vehicle (no approved company)
       const created = await vehicleService.addVehicle(userId, vehicleName, vehicleType, licensePlate, battery);
       res.status(201).json({
         message: "Vehicle added successfully",
@@ -313,7 +283,7 @@ export class BusinessController {
         return;
       }
 
-      // Ensure the requester owns this personal vehicle
+      // Ensure the requester owns this user vehicle
       if (vehicle.UserId && req.user?.userId && vehicle.UserId !== req.user.userId) {
         res.status(403).json({ error: "Forbidden" });
         return;
@@ -378,8 +348,7 @@ export class BusinessController {
         return;
       }
 
-      const isPersonal = !!user.CompanyName && user.CompanyName.toLowerCase().startsWith("personal");
-      if (user.CompanyId && user.RoleName === "BUSINESS" && !isPersonal) {
+      if (user.CompanyId && user.RoleName === "BUSINESS") {
         const rs = await pool
           .request()
           .input("CompanyId", Int, user.CompanyId)
@@ -421,8 +390,7 @@ export class BusinessController {
         `);
       const info = userRs.recordset[0];
 
-      const isPersonal = !!info?.CompanyName && info.CompanyName.toLowerCase().startsWith("personal");
-      if (!info?.CompanyId || isPersonal) {
+      if (!info?.CompanyId) {
         res.status(200).json({ totalPayments: 0, totalAmount: 0, currency: "VND", companyId: null, companyName: null });
         return;
       }

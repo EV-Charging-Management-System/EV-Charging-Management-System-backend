@@ -51,27 +51,19 @@ class SubscriptionService {
         IpAddr = "127.0.0.1",
       } = data;
 
-      // CompanyId is optional in the new schema. Treat any company with name starting 'Personal'
-      // as NO company (null) for subscription purposes.
+      // CompanyId is optional in the new schema. Use the user's CompanyId if not provided.
       let finalCompanyId: number | null = CompanyId ?? null;
       if ((finalCompanyId === null || finalCompanyId === undefined) && UserId) {
         const userRow = await pool
           .request()
           .input("UserId", Int, UserId)
           .query(`
-            SELECT u.CompanyId, c.CompanyName
+            SELECT u.CompanyId
             FROM [User] u
-            LEFT JOIN [Company] c ON u.CompanyId = c.CompanyId
             WHERE u.UserId = @UserId
           `);
         const row = userRow.recordset[0];
-        const companyId = row?.CompanyId ?? null;
-        const companyName: string | null = row?.CompanyName ?? null;
-        if (companyId && companyName && companyName.toLowerCase().startsWith("personal")) {
-          finalCompanyId = null; // Treat as no company
-        } else {
-          finalCompanyId = companyId;
-        }
+        finalCompanyId = row?.CompanyId ?? null;
       }
 
       // 1️⃣ Thêm mới bản ghi Subscription

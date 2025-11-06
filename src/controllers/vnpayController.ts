@@ -55,18 +55,11 @@ class VnpayController {
           .request()
           .input("UserId", Int, userId)
           .query(`
-            SELECT u.CompanyId, c.CompanyName
+            SELECT u.CompanyId
             FROM [User] u
-            LEFT JOIN [Company] c ON u.CompanyId = c.CompanyId
             WHERE u.UserId = @UserId
           `);
         let companyId: number | null = userRow.recordset[0]?.CompanyId ?? null;
-        const companyName: string | null = userRow.recordset[0]?.CompanyName ?? null;
-
-        // Treat 'Personal' companies as NO company for subscription context
-        if (companyId && companyName && companyName.toLowerCase().startsWith("personal")) {
-          companyId = null;
-        }
 
         // Create a PENDING subscription for this Package
         const startDate = new Date();
