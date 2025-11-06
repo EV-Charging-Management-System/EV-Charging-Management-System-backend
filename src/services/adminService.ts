@@ -12,14 +12,13 @@ export class AdminService {
           u.UserName,
           u.Mail,
           u.CompanyId,
-          u.Status,
           c.CompanyName,
           c.Address,
           c.Phone,
           c.Mail AS CompanyMail
         FROM [User] u
           LEFT JOIN [Company] c ON u.CompanyId = c.CompanyId
-        WHERE u.Status = 'PENDING'
+        WHERE u.CompanyId IS NOT NULL AND u.RoleName <> 'BUSINESS'
         ORDER BY u.UserId DESC;
       `);
       return result.recordset;
@@ -38,9 +37,7 @@ export class AdminService {
         .input("userId", userId)
         .query(`
           UPDATE [User]
-          SET
-            RoleName = 'BUSINESS',
-            Status = 'APPROVED'
+          SET RoleName = 'BUSINESS'
           WHERE UserId = @userId;
         `);
     } catch (error) {
@@ -53,14 +50,15 @@ export class AdminService {
   async rejectBusiness(userId: number): Promise<void> {
     const pool = await getDbPool();
     try {
-      await pool
-        .request()
-        .input("userId", userId)
-        .query(`
-          UPDATE [User]
-          SET Status = 'REJECTED'
-          WHERE UserId = @userId;
-        `);
+      // Detach and delete associated company if any
+      const rs = await pool.request().input("userId", userId).query(`SELECT CompanyId FROM [User] WHERE UserId = @userId`);
+      const companyId = rs.recordset[0]?.CompanyId;
+
+      await pool.request().input("userId", userId).query(`UPDATE [User] SET CompanyId = NULL WHERE UserId = @userId`);
+
+      if (companyId) {
+        await pool.request().input("CompanyId", companyId).query(`DELETE FROM [Company] WHERE CompanyId = @CompanyId`);
+      }
     } catch (error) {
       console.error("❌ Error rejecting business:", error);
       throw new Error("Error rejecting business");
@@ -72,7 +70,7 @@ export class AdminService {
     const pool = await getDbPool();
     try {
       const result = await pool.request().query(`
-        SELECT UserId, Mail, UserName, RoleName, CompanyId, Status
+        SELECT UserId, Mail, UserName, RoleName, CompanyId
         FROM [User]
         ORDER BY UserId DESC;
       `);

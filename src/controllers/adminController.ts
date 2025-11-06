@@ -1,6 +1,7 @@
 import type { AuthRequest } from "../middlewares/authMiddleware";
 import type { NextFunction, Response } from "express";
 import { adminService } from "../services/adminService";
+import { getDbPool } from "../config/database";
 
 export class AdminController {
   // 📊 Dashboard thống kê
@@ -53,6 +54,58 @@ export class AdminController {
       const { id } = req.params;
       await adminService.rejectBusiness(Number(id));
       res.json({ success: true, message: "❌ Business rejected successfully" });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ✅/❌ Duyệt hoặc từ chối doanh nghiệp theo body
+  async approveBusinessByBody(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { userId, companyId, approve } = req.body || {};
+      if (typeof userId !== "number" || typeof approve !== "boolean") {
+        res.status(400).json({ message: "userId and approve are required" });
+        return;
+      }
+
+      const pool = await getDbPool();
+
+      if (approve) {
+        // Ensure companyId belongs or set it
+        if (typeof companyId !== "number") {
+          res.status(400).json({ message: "companyId is required when approving" });
+          return;
+        }
+
+        await pool
+          .request()
+          .input("UserId", userId)
+          .input("CompanyId", companyId)
+          .query(`UPDATE [User] SET RoleName = 'BUSINESS', CompanyId = @CompanyId WHERE UserId = @UserId`);
+
+        res.status(200).json({
+          message: "User upgraded to Business successfully",
+          userId,
+          role: "BUSINESS",
+          companyId,
+        });
+        return;
+      }
+
+      // Reject: first detach user from company, then delete the company to satisfy FK constraints
+      await pool
+        .request()
+        .input("UserId", userId)
+        .query(`UPDATE [User] SET CompanyId = NULL WHERE UserId = @UserId`);
+
+      if (typeof companyId === "number") {
+        await pool.request().input("CompanyId", companyId).query(`DELETE FROM [Company] WHERE CompanyId = @CompanyId`);
+      }
+
+      res.status(200).json({
+        message: "Company request rejected",
+        userId,
+      });
     } catch (error) {
       next(error);
     }

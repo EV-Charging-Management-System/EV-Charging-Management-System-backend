@@ -14,6 +14,7 @@ router.get("/dashboard", adminController.getDashboardStats);
 router.get("/approvals", adminController.getPendingBusinessApprovals);
 router.patch("/approvals/:id/approve", adminController.approveBusiness);
 router.patch("/approvals/:id/reject", adminController.rejectBusiness);
+router.put("/approve-business", adminController.approveBusinessByBody);
 
 // 👥 Người dùng & staff
 router.get("/users", adminController.getAllUsers);
