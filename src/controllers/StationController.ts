@@ -36,6 +36,38 @@ class StationController {
       next(error)
     }
   })
-}
 
+  // 🟢 Lấy danh sách điểm sạc theo StationId
+  GetPoint = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { stationId } = req.query
+
+      if (!stationId) {
+        res.status(400).json({ message: "Missing stationId" })
+        return
+      }
+
+      const points = await stationService.getPointsByStation(Number(stationId))
+      res.status(200).json({ data: points, message: "Fetched points by station successfully" })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // 🟢 Lấy danh sách cổng sạc theo PointId
+  GetPort = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { pointId } = req.query
+      if (!pointId) {
+        res.status(400).json({ message: "Missing pointId" })
+        return
+      }
+
+      const port = await stationService.getPortByPoint(Number(pointId))
+      res.status(200).json({ data: port, message: "Fetched port by point successfully" })
+    } catch (error) {
+      next(error)
+    }
+  })
+}
 export const stationController = new StationController()

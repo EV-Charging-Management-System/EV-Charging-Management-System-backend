@@ -51,11 +51,49 @@ class SubscriptionService {
         IpAddr = "127.0.0.1",
       } = data;
 
+      // Ensure CompanyId is set because DB column may be NOT NULL.
+      // If caller didn't provide CompanyId, try to read it from User table.
+      // If user has no company, create a personal company and assign it to the user.
+      let finalCompanyId: number | null = CompanyId ?? null;
+      if ((finalCompanyId === null || finalCompanyId === undefined) && UserId) {
+        const userRow = await pool
+          .request()
+          .input("UserId", Int, UserId)
+          .query(`SELECT UserId, UserName, CompanyId FROM [User] WHERE UserId = @UserId`);
+        const existingCompanyId = userRow.recordset[0]?.CompanyId ?? null;
+        if (existingCompanyId) {
+          finalCompanyId = existingCompanyId;
+        } else {
+          // create a personal company for this user
+          const displayName = userRow.recordset[0]?.UserName || `User-${UserId}`;
+          const newCompany = await pool
+            .request()
+            .input("CompanyName", NVarChar(100), `Personal - ${displayName}`)
+            .query(`
+              INSERT INTO [Company] (CompanyName)
+                OUTPUT INSERTED.CompanyId
+              VALUES (@CompanyName)
+            `);
+          const newCompanyId: number | undefined = newCompany.recordset[0]?.CompanyId;
+          if (newCompanyId) {
+            finalCompanyId = newCompanyId;
+            // update user to link this new company
+            await pool
+              .request()
+              .input("UserId", Int, UserId)
+              .input("CompanyId", Int, finalCompanyId)
+              .query(`UPDATE [User] SET CompanyId = @CompanyId WHERE UserId = @UserId`);
+          } else {
+            throw new Error("Unable to create default Company for user.");
+          }
+        }
+      }
+
       // 1️⃣ Thêm mới bản ghi Subscription
       const insertResult = await pool
         .request()
         .input("UserId", Int, UserId)
-        .input("CompanyId", Int, CompanyId)
+        .input("CompanyId", Int, finalCompanyId)
         .input("PackageId", Int, PackageId)
         .input("StartMonth", NVarChar(100), StartMonth ?? "") 
         .input("StartDate", SqlDate, StartDate)
