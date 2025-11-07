@@ -18,6 +18,7 @@ router.get("/reports/revenue", adminController.getRevenueReport)
 router.get("/reports/usage", adminController.getUsageReport)
 router.post("/createstaff", adminController.createStaff)
 router.get("/getAllStaff", adminController.getAllStaff)
-router.patch('/deleteStation',adminController.deleteStationById)
 
+router.patch('/deleteStation',adminController.deleteStationById)
+router.patch('/createPoint',adminController.createPoint)
 export { router as adminRoutes }

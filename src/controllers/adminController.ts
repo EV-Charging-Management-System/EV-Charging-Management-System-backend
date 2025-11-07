@@ -133,7 +133,19 @@ export class AdminController {
     } catch (error) {
       next(error)
     }
-
+  }
+  async createPoint(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { stationId, pointName } = req.body
+      if (!stationId || !pointName) {
+        res.status(400).json({ message: "stationId and pointName are required" })
+        return
+      }
+      const newPoint = await adminService.createPoint(stationId, pointName)
+      res.status(201).json({ success: true, data: newPoint, message: "Point created successfully" })
+    } catch (error) {
+      next(error)
+    }
   }
 }
 export const adminController = new AdminController()

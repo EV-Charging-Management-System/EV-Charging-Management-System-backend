@@ -244,6 +244,20 @@ export class AdminService {
       throw new Error("Error deleting station: " + error)
     }
   }
+  async createPoint(stationId: number, pointName: string): Promise<void> {
+    const pool = await getDbPool()
+    try {
+      await pool.request()
+        .input("StationId", stationId)
+        .input("PointName", pointName)
+        .query(`
+          INSERT INTO [ChargingPoint] (StationId, PointName)
+          VALUES (@StationId, @PointName)
+        `)
+    } catch (error) {
+      throw new Error("Error creating charging point: " + error)
+    }
+  }
 }
 
 export const adminService = new AdminService()
