@@ -56,6 +56,19 @@ class StationController {
     next(error)
   }
 })
+  DeleteStation = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { stationId } = req.body
+    if (!stationId) {
+      res.status(400).json({ message: "Missing stationId" })
+      return
+    }
+    await stationService.deleteStation(Number(stationId))
+    res.status(200).json({ message: "Station deleted successfully" })
+  } catch (error) {
+    next(error)
+  }
+})
 }
 
 export const stationController = new StationController()

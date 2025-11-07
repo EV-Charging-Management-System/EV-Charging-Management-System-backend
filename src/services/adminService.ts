@@ -231,6 +231,19 @@ export class AdminService {
       throw new Error("Error fetching staff users")
     }
   }
+  async deleteStationById(stationId: number): Promise<void> {
+    const pool = await getDbPool()
+    try {
+      await pool.request()
+        .input("StationId", stationId)
+        .query(`
+          DELETE FROM [Station]
+          WHERE StationId = @StationId
+        `)
+    } catch (error) {
+      throw new Error("Error deleting station: " + error)
+    }
+  }
 }
 
 export const adminService = new AdminService()

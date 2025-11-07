@@ -121,7 +121,19 @@ export class AdminController {
       next(error)
     }
   }
+  async deleteStationById(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { stationId } = req.body
+      if (!stationId) {
+        res.status(400).json({ message: "stationId is required" })
+        return
+      }
+      await adminService.deleteStationById(stationId)
+      res.json({ success: true, message: "Station deleted successfully" })
+    } catch (error) {
+      next(error)
+    }
+
+  }
 }
-
-
 export const adminController = new AdminController()
