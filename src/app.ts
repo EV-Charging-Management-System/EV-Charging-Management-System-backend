@@ -21,6 +21,7 @@ import { vehicleRoutes } from "./routes/vehicleRoutes";
 import { staffRoutes } from "./routes/staffRoutes";
 import { vnpayRoutes } from "./routes/vnpayRoutes";
 import { businessRoutes } from "./routes/businessRoutes"; // ✅ mới thêm
+import { invoiceRoutes } from "./routes/invoiceRoutes";
 
 const app = express();
 app.use(express.json());
@@ -64,10 +65,11 @@ app.use("/api/payment", paymentRoutes);
 app.use("/api/membership", membershipRoutes);
 app.use("/api/charging-session", chargingSessionRoutes);
 app.use("/api/vehicle", vehicleRoutes);
-app.use("/api/company", companyRoutes); // ⚠️ trùng với /api/companies — có thể bỏ 1 cái
+app.use("/api/company", companyRoutes); 
 app.use("/api/staff", staffRoutes);
 app.use("/api/vnpay", vnpayRoutes);
-app.use("/api/business", businessRoutes); // ✅ thêm mới
+app.use("/api/business", businessRoutes); 
+app.use("/api/invoice", invoiceRoutes);
 
 // 🟢 Initialize application
 export const initializeApp = async (): Promise<void> => {

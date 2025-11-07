@@ -3,6 +3,41 @@ import type { NextFunction, Response } from "express"
 import { paymentService } from "../services/paymentService"
 
 export class PaymentController {
+  async payAll(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const tokenUserId = req.user?.userId
+      const { userId: bodyUserId, paymentType } = req.body || {}
+
+      const userId = Number(bodyUserId ?? tokenUserId)
+      if (!userId || !paymentType) {
+        res.status(400).json({ message: "Missing required fields: userId, paymentType" })
+        return
+      }
+
+      // Optional: ensure the caller pays only for themselves
+      if (tokenUserId && bodyUserId && Number(bodyUserId) !== tokenUserId) {
+        res.status(403).json({ message: "Forbidden" })
+        return
+      }
+
+      const result = await paymentService.payAllPendingInvoices(userId, String(paymentType))
+
+      res.status(200).json({
+        success: true,
+        data: {
+          paymentId: result.paymentId,
+          userId: result.userId,
+          totalAmount: result.totalAmount,
+          paymentType: result.paymentType,
+          paymentStatus: result.paymentStatus,
+          paidInvoices: result.paidInvoices,
+          createdAt: result.createdAt,
+        },
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
   async processPayment(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { sessionId, amount, paymentMethod, isPostPaid } = req.body

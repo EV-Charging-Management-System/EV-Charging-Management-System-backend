@@ -38,6 +38,89 @@ export class PaymentService {
     }
   }
 
+  // Pay all pending invoices of a user and create a single payment record
+  async payAllPendingInvoices(userId: number, paymentType: string): Promise<{
+    paymentId: number | null
+    userId: number
+    totalAmount: number
+    paymentType: string
+    paymentStatus: string
+    paidInvoices: Array<{ invoiceId: number; amount: number }>
+    createdAt: string
+  }> {
+    const pool = await getDbPool()
+    try {
+      // 1) Fetch all pending invoices for the user
+      const pending = await pool
+        .request()
+        .input("UserId", userId)
+        .query(`SELECT InvoiceId, TotalAmount FROM [Invoice] WHERE UserId = @UserId AND PaidStatus = 'Pending'`)
+
+      const invoices: Array<{ invoiceId: number; amount: number }> = pending.recordset.map((r: any) => ({
+        invoiceId: r.InvoiceId,
+        amount: Number(r.TotalAmount || 0),
+      }))
+
+      if (invoices.length === 0) {
+        const now = new Date()
+        const createdAt = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+          now.getDate()
+        ).padStart(2, "0")}`
+        return {
+          paymentId: null,
+          userId,
+          totalAmount: 0,
+          paymentType,
+          paymentStatus: "NothingToPay",
+          paidInvoices: [],
+          createdAt,
+        }
+      }
+
+      const totalAmount = invoices.reduce((sum, it) => sum + it.amount, 0)
+
+      // 2) Create a single Payment record for the total
+      const paymentTime = new Date()
+      const insertPayment = await pool
+        .request()
+        .input("UserId", userId)
+        .input("TotalAmount", totalAmount)
+        .input("PaymentTime", paymentTime)
+        .input("PaymentStatus", "Paid")
+        .input("PaymentType", paymentType)
+        .input("IsPostPaid", 0)
+        .query(`
+          INSERT INTO [Payment] (UserId, SessionId, InvoiceId, TotalAmount, PaymentTime, PaymentStatus, PaymentType, IsPostPaid)
+          OUTPUT INSERTED.PaymentId
+          VALUES (@UserId, NULL, NULL, @TotalAmount, @PaymentTime, @PaymentStatus, @PaymentType, @IsPostPaid)
+        `)
+      const paymentId: number = insertPayment.recordset[0]?.PaymentId
+
+      // 3) Mark those invoices as Paid
+      // Build a parameterized IN clause
+      const idParams = invoices.map((_, idx) => `@id${idx}`).join(",")
+      const req = pool.request().input("UserId", userId)
+      invoices.forEach((inv, idx) => req.input(`id${idx}`, inv.invoiceId))
+      await req.query(`UPDATE [Invoice] SET PaidStatus = 'Paid' WHERE UserId = @UserId AND InvoiceId IN (${idParams})`)
+
+      const createdAt = `${paymentTime.getFullYear()}-${String(paymentTime.getMonth() + 1).padStart(2, "0")}-${String(
+        paymentTime.getDate()
+      ).padStart(2, "0")}`
+
+      return {
+        paymentId,
+        userId,
+        totalAmount,
+        paymentType,
+        paymentStatus: "Paid",
+        paidInvoices: invoices,
+        createdAt,
+      }
+    } catch (error) {
+      throw new Error("Error paying all pending invoices: " + error)
+    }
+  }
+
   async createInvoice(userId: number, companyId: number | null, monthYear: string, totalAmount: number): Promise<any> {
     const pool = await getDbPool()
     try {

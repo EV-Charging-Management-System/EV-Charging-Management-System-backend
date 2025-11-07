@@ -1,7 +1,7 @@
 import type { AuthRequest } from "../middlewares/authMiddleware";
 import type { NextFunction, Response } from "express";
 import { getDbPool } from "../config/database";
-import { Int, NVarChar, VarChar } from "mssql";
+import { Int, NVarChar, VarChar, Date as SqlDate } from "mssql";
 import { companyService } from "../services/companyService";
 import { vehicleService } from "../services/vehicleService";
 
@@ -422,6 +422,256 @@ export class BusinessController {
       });
     } catch (error) {
       console.error("❌ Lỗi trong getPaymentsSummary:", error);
+      next(error);
+    }
+  }
+
+  // � Tất cả lịch sạc (ChargingSession) của mọi xe trong doanh nghiệp
+  async getCompanySessions(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { companyId } = req.params as { companyId: string };
+      const cid = Number(companyId);
+      if (isNaN(cid)) {
+        res.status(400).json({ success: false, message: "companyId không hợp lệ" });
+        return;
+      }
+
+      const pool = await getDbPool();
+
+      const rs = await pool
+        .request()
+        .input("CompanyId", Int, cid)
+        .query(`
+          SELECT 
+            cs.SessionId, cs.StationId, cs.PointId, cs.PortId, cs.BookingId, cs.VehicleId,
+            cs.TotalTime, cs.ChargingStatus, cs.Pause, cs.SessionPrice, cs.CheckinTime, cs.CheckoutTime,
+            cs.Status, cs.PenaltyFee, cs.BatteryPercentage,
+            v.LicensePlate, v.VehicleName
+          FROM [ChargingSession] cs
+          INNER JOIN [Vehicle] v ON cs.VehicleId = v.VehicleId
+          WHERE v.CompanyId = @CompanyId
+          ORDER BY cs.CheckoutTime DESC, cs.SessionId DESC
+        `);
+
+      res.status(200).json({ success: true, data: rs.recordset });
+    } catch (error) {
+      console.error("❌ Lỗi trong getCompanySessions:", error);
+      next(error);
+    }
+  }
+
+  // �📄 Invoices & Payments theo biển số xe trong công ty
+  async getInvoicePaymentByPlate(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { licensePlate, companyId } = req.query as { licensePlate?: string; companyId?: string };
+      if (!licensePlate || !companyId) {
+        res.status(400).json({ success: false, message: "licensePlate và companyId là bắt buộc" });
+        return;
+      }
+
+      const companyIdNum = Number(companyId);
+      if (isNaN(companyIdNum)) {
+        res.status(400).json({ success: false, message: "companyId không hợp lệ" });
+        return;
+      }
+
+      const pool = await getDbPool();
+
+      // Ensure vehicle belongs to company
+      const vRs = await pool
+        .request()
+        .input("LicensePlate", VarChar(50), licensePlate)
+        .query(`SELECT TOP 1 VehicleId, CompanyId, UserId FROM [Vehicle] WHERE LicensePlate = @LicensePlate`);
+      const vehicle = vRs.recordset[0];
+      if (!vehicle || vehicle.CompanyId !== companyIdNum) {
+        res.status(404).json({ success: false, message: "Không tìm thấy xe thuộc công ty" });
+        return;
+      }
+
+      // Find a user linked to this vehicle via recent session
+      const uRs = await pool
+        .request()
+        .input("VehicleId", Int, vehicle.VehicleId)
+        .query(`
+          SELECT TOP 1 u.UserId, u.UserName
+          FROM [ChargingSession] cs
+          INNER JOIN [Vehicle] v ON cs.VehicleId = v.VehicleId
+          INNER JOIN [User] u ON v.UserId = u.UserId
+          WHERE cs.VehicleId = @VehicleId
+          ORDER BY cs.CheckoutTime DESC
+        `);
+
+      const u = uRs.recordset[0];
+      const userId = u?.UserId as number | undefined;
+
+      let invoices: any[] = [];
+      let payments: any[] = [];
+      if (userId) {
+        const invRs = await pool
+          .request()
+          .input("UserId", Int, userId)
+          .query(`
+            SELECT InvoiceId, SessionId, TotalAmount, PaidStatus, CreatedAt
+            FROM [Invoice]
+            WHERE UserId = @UserId
+            ORDER BY CreatedAt DESC
+          `);
+        invoices = invRs.recordset;
+
+        const payRs = await pool
+          .request()
+          .input("UserId", Int, userId)
+          .query(`
+            SELECT PaymentId, TotalAmount, PaymentStatus, PaymentTime
+            FROM [Payment]
+            WHERE UserId = @UserId
+            ORDER BY PaymentTime DESC
+          `);
+        payments = payRs.recordset;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          companyId: companyIdNum,
+          licensePlate,
+          user: userId ? { userId, name: u.UserName } : null,
+          invoices: invoices.map((x) => ({
+            invoiceId: x.InvoiceId,
+            sessionId: x.SessionId ?? null,
+            totalAmount: x.TotalAmount,
+            paidStatus: x.PaidStatus,
+          })),
+          payments: payments.map((p) => ({
+            paymentId: p.PaymentId,
+            totalAmount: p.TotalAmount,
+            paymentStatus: p.PaymentStatus,
+            paymentTime: p.PaymentTime,
+          })),
+        },
+      });
+    } catch (error) {
+      console.error("❌ Lỗi trong getInvoicePaymentByPlate:", error);
+      next(error);
+    }
+  }
+
+  // 📊 Báo cáo tổng quan doanh nghiệp (all-time)
+  async getCompanyOverview(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const companyIdParam = (req.params as any)?.companyId as string | undefined;
+      const companyIdQuery = (req.query as any)?.companyId as string | undefined;
+      const companyId = companyIdParam ?? companyIdQuery;
+      if (!companyId) {
+        res.status(400).json({ success: false, message: "companyId là bắt buộc" });
+        return;
+      }
+      const cid = Number(companyId);
+      if (isNaN(cid)) {
+        res.status(400).json({ success: false, message: "companyId không hợp lệ" });
+        return;
+      }
+
+  // All-time report (no month/year)
+
+      const pool = await getDbPool();
+
+      // Company name
+      const cRs = await pool
+        .request()
+        .input("CompanyId", Int, cid)
+        .query(`SELECT TOP 1 CompanyName FROM [Company] WHERE CompanyId = @CompanyId`);
+      const companyName = cRs.recordset[0]?.CompanyName ?? null;
+
+      // Total sessions (all time) for company vehicles
+      const sessRs = await pool
+        .request()
+        .input("CompanyId", Int, cid)
+        .query(`
+          SELECT COUNT(*) AS TotalSessions, ISNULL(SUM(ISNULL(cs.PenaltyFee,0)),0) AS TotalPenalty
+          FROM [ChargingSession] cs
+          INNER JOIN [Vehicle] v ON cs.VehicleId = v.VehicleId
+          WHERE v.CompanyId = @CompanyId
+        `);
+      const totalSessions = Number(sessRs.recordset[0]?.TotalSessions || 0);
+      const totalPenaltyFee = Number(sessRs.recordset[0]?.TotalPenalty || 0);
+
+      // Invoices counts for company (all time)
+      const invCountRs = await pool
+        .request()
+        .input("CompanyId", Int, cid)
+        .query(`
+          SELECT 
+            COUNT(*) AS Total,
+            SUM(CASE WHEN PaidStatus = 'Paid' THEN 1 ELSE 0 END) AS Paid
+          FROM [Invoice]
+          WHERE CompanyId = @CompanyId
+        `);
+      const totalInvoices = Number(invCountRs.recordset[0]?.Total || 0);
+      const paidInvoices = Number(invCountRs.recordset[0]?.Paid || 0);
+      const unpaidInvoices = Math.max(0, totalInvoices - paidInvoices);
+
+      // Total revenue from payments (by linking through Invoice or Session->Vehicle) all time
+      const payRs = await pool
+        .request()
+        .input("CompanyId", Int, cid)
+        .query(`
+          SELECT ISNULL(SUM(p.TotalAmount),0) AS TotalAmount
+          FROM [Payment] p
+          LEFT JOIN [Invoice] i ON p.InvoiceId = i.InvoiceId
+          LEFT JOIN [ChargingSession] cs ON p.SessionId = cs.SessionId
+          LEFT JOIN [Vehicle] v ON cs.VehicleId = v.VehicleId
+          WHERE p.PaymentStatus IN ('Paid','PAID')
+            AND (i.CompanyId = @CompanyId OR v.CompanyId = @CompanyId)
+        `);
+      const totalRevenue = Number(payRs.recordset[0]?.TotalAmount || 0);
+
+      // Top users by spend and sessions in company (all time)
+      const topRs = await pool
+        .request()
+        .input("CompanyId", Int, cid)
+        .query(`
+          SELECT TOP 5 u.UserId, u.UserName AS Name,
+                 ISNULL(SUM(p.TotalAmount),0) AS TotalSpent,
+                 ISNULL(COUNT(DISTINCT cs.SessionId),0) AS Sessions
+          FROM [User] u
+          LEFT JOIN [Payment] p ON p.UserId = u.UserId AND p.PaymentStatus IN ('Paid','PAID')
+          LEFT JOIN [Vehicle] v ON v.UserId = u.UserId AND v.CompanyId = @CompanyId
+          LEFT JOIN [ChargingSession] cs ON cs.VehicleId = v.VehicleId
+          WHERE u.CompanyId = @CompanyId
+          GROUP BY u.UserId, u.UserName
+          ORDER BY TotalSpent DESC
+        `);
+
+      // Subscription count (ACTIVE) for this company
+      const subRs = await pool
+        .request()
+        .input("CompanyId", Int, cid)
+        .query(`SELECT COUNT(*) AS Cnt FROM [Subscription] WHERE CompanyId = @CompanyId AND SubStatus = 'ACTIVE'`);
+      const subscriptionCount = Number(subRs.recordset[0]?.Cnt || 0);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          companyId: cid,
+          companyName,
+          totalSessions,
+          totalInvoices,
+          paidInvoices,
+          unpaidInvoices,
+          totalRevenue,
+          totalPenaltyFee,
+          subscriptionCount,
+          topUsers: topRs.recordset.map((r: any) => ({
+            userId: r.UserId,
+            name: r.Name,
+            totalSpent: Number(r.TotalSpent || 0),
+            sessions: Number(r.Sessions || 0),
+          })),
+        },
+      });
+    } catch (error) {
+      console.error("❌ Lỗi trong getCompanyOverview:", error);
       next(error);
     }
   }

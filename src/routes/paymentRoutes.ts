@@ -12,5 +12,6 @@ router.get("/company/:companyId", authenticate, authorize(["BUSINESS"]), payment
 router.get("/pending", authenticate, authorize(["EVDRIVER", "BUSINESS"]), paymentController.getPendingPayments)
 router.patch("/:id/pay", authenticate, authorize(["EVDRIVER", "BUSINESS"]), paymentController.payInvoice)
 router.get("/report/:monthYear", authenticate, authorize(["EVDRIVER", "BUSINESS"]), paymentController.getMonthlyReport)
+router.post("/pay-all", authenticate, authorize(["EVDRIVER", "BUSINESS"]), paymentController.payAll)
 
 export { router as paymentRoutes }
