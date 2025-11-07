@@ -286,6 +286,48 @@ export class AdminService {
       throw new Error("Error deleting charging point: " + error)
     }
   }
+  async createPort(pointId: number, portName: string): Promise<void> {
+    const pool = await getDbPool()
+    try {
+      await pool.request()
+        .input("PointId", pointId)
+        .input("PortName", portName)
+        .query(`
+          INSERT INTO [ChargingPort] (PointId, PortName)
+          VALUES (@PointId, @PortName)
+        `)
+    } catch (error) {
+      throw new Error("Error creating charging port: " + error)
+    }
+  }
+  async updatePort(portId: number, portName: string): Promise<void> {
+    const pool = await getDbPool()
+    try {
+      await pool.request()
+        .input("PortId", portId)
+        .input("PortName", portName)
+        .query(`
+          UPDATE [ChargingPort]
+          SET PortName = @PortName
+          WHERE PortId = @PortId
+        `)
+    } catch (error) {
+      throw new Error("Error updating charging port: " + error)
+    }
+  }
+  async deletePortById(portId: number): Promise<void> {
+    const pool = await getDbPool()
+    try {
+      await pool.request()
+        .input("PortId", portId)
+        .query(`
+          DELETE FROM [ChargingPort]
+          WHERE PortId = @PortId
+        `)
+    } catch (error) {
+      throw new Error("Error deleting charging port: " + error)
+    }
+  }
 }
 
 export const adminService = new AdminService()

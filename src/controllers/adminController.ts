@@ -173,5 +173,44 @@ export class AdminController {
       next(error)
     }
   }
+  async createPort(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { pointId, portName } = req.body
+      if (!pointId || !portName) {
+        res.status(400).json({ message: "pointId and portName are required" })
+        return
+      }
+      const newPort = await adminService.createPort(pointId, portName)
+      res.status(201).json({ success: true, data: newPort, message: "Port created successfully" })
+    } catch (error) {
+      next(error)
+    }
+  }
+  async updatePort(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { portId, portName } = req.body
+      if (!portId || !portName) {
+        res.status(400).json({ message: "portId and portName are required" })
+        return
+      }
+      await adminService.updatePort(portId, portName)
+      res.json({ success: true, message: "Port updated successfully" })
+    } catch (error) {
+      next(error)
+    }
+  }
+  async deletePortById(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { portId } = req.body
+      if (!portId) {
+        res.status(400).json({ message: "portId is required" })
+        return
+      }
+      await adminService.deletePortById(portId)
+      res.json({ success: true, message: "Port deleted successfully" })
+    } catch (error) {
+      next(error)
+    }
+  }
 }
 export const adminController = new AdminController()

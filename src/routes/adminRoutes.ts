@@ -23,4 +23,7 @@ router.patch('/deleteStation',adminController.deleteStationById)
 router.post('/createPoint',adminController.createPoint)
 router.post('/updatePoint',adminController.updatePoint)
 router.patch('/deletePoint',adminController.deletePointById)
+router.post('/createPort',adminController.createPort)
+router.post('/updatePort',adminController.updatePort)
+router.patch('/deletePort',adminController.deletePortById)
 export { router as adminRoutes }
