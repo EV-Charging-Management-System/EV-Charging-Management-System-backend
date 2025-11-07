@@ -54,7 +54,7 @@ export class PaymentService {
       const pending = await pool
         .request()
         .input("UserId", userId)
-        .query(`SELECT InvoiceId, TotalAmount FROM [Invoice] WHERE UserId = @UserId AND PaidStatus = 'Pending'`)
+        .query(`SELECT InvoiceId, TotalAmount FROM [Invoice] WHERE UserId = @UserId AND PaidStatus = 'Pending' AND SessionId IS NOT NULL`)
 
       const invoices: Array<{ invoiceId: number; amount: number }> = pending.recordset.map((r: any) => ({
         invoiceId: r.InvoiceId,
@@ -176,6 +176,24 @@ export class PaymentService {
     }
   }
 
+  // New: Only invoices created from charging sessions
+  async getSessionInvoices(userId: number): Promise<any[]> {
+    const pool = await getDbPool()
+    try {
+      const result = await pool
+        .request()
+        .input("UserId", userId)
+        .query(`
+          SELECT * FROM [Invoice]
+          WHERE UserId = @UserId AND SessionId IS NOT NULL
+          ORDER BY InvoiceId DESC
+        `)
+      return result.recordset
+    } catch (error) {
+      throw new Error("Error fetching session invoices")
+    }
+  }
+
   async getCompanyInvoices(companyId: number): Promise<any[]> {
     const pool = await getDbPool()
     try {
@@ -188,6 +206,24 @@ export class PaymentService {
       return result.recordset
     } catch (error) {
       throw new Error("Error fetching company invoices")
+    }
+  }
+
+  // New: Only company invoices created from charging sessions
+  async getCompanySessionInvoices(companyId: number): Promise<any[]> {
+    const pool = await getDbPool()
+    try {
+      const result = await pool
+        .request()
+        .input("CompanyId", companyId)
+        .query(`
+          SELECT * FROM [Invoice]
+          WHERE CompanyId = @CompanyId AND SessionId IS NOT NULL
+          ORDER BY InvoiceId DESC
+        `)
+      return result.recordset
+    } catch (error) {
+      throw new Error("Error fetching company session invoices")
     }
   }
 
@@ -239,6 +275,30 @@ export class PaymentService {
       return result.recordset[0]
     } catch (error) {
       throw new Error("Error fetching monthly report")
+    }
+  }
+
+  // New: get summary for all months for a user
+  async getMonthlyReports(userId: number): Promise<any[]> {
+    const pool = await getDbPool()
+    try {
+      const result = await pool
+        .request()
+        .input("UserId", userId)
+        .query(`
+          SELECT 
+            CONVERT(VARCHAR(7), PaymentTime, 121) AS MonthYear,
+            SUM(TotalAmount) AS TotalSpent,
+            COUNT(*) AS SessionCount,
+            AVG(TotalAmount) AS AvgSessionCost
+          FROM [Payment]
+          WHERE UserId = @UserId
+          GROUP BY CONVERT(VARCHAR(7), PaymentTime, 121)
+          ORDER BY MonthYear DESC
+        `)
+      return result.recordset
+    } catch (error) {
+      throw new Error("Error fetching monthly reports")
     }
   }
 }

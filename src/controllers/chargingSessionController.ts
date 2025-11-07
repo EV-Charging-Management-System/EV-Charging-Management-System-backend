@@ -1,6 +1,7 @@
 import type { AuthRequest } from "../middlewares/authMiddleware"
 import type { NextFunction, Response } from "express"
 import { chargingSessionService } from "../services/chargingSessionService"
+import { getDbPool } from "../config/database"
 
 export class ChargingSessionController {
   async startSession(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -13,7 +14,17 @@ export class ChargingSessionController {
       }
 
       const session = await chargingSessionService.startSession(bookingId, vehicleId, stationId, pointId, portId, batteryPercentage)
-      res.status(201).json({ success: true, data: session })
+      res.status(201).json({
+        success: true,
+        message: "Charging session started successfully",
+        data: {
+          sessionId: session.sessionId,
+          stationId,
+          vehicleId,
+          startTime: session.checkinTime,
+          status: session.chargingStatus,
+        },
+      })
     } catch (error) {
       next(error)
     }
@@ -22,8 +33,39 @@ export class ChargingSessionController {
   async endSession(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params
-      const result = await chargingSessionService.endSession(Number(id))
-      res.json({ success: true, data: result })
+      await chargingSessionService.endSession(Number(id))
+
+      const sessionId = Number(id)
+      const pool = await getDbPool()
+      const sessionRes = await pool
+        .request()
+        .input("SessionId", sessionId)
+        .query(`SELECT SessionId, CheckinTime, CheckoutTime, TotalTime, PortId, SessionPrice, PenaltyFee FROM [ChargingSession] WHERE SessionId = @SessionId`)
+      const cs = sessionRes.recordset[0]
+      if (!cs) {
+        res.status(404).json({ success: false, message: "Session not found" })
+        return
+      }
+      const portRes = await pool
+        .request()
+        .input("PortId", cs.PortId)
+        .query(`SELECT PortTypeOfKwh FROM [ChargingPort] WHERE PortId = @PortId`)
+      const port = portRes.recordset[0]
+      const start = new Date(cs.CheckinTime)
+      const end = new Date(cs.CheckoutTime)
+      const durationMinutes = Math.max(0, Math.ceil((end.getTime() - start.getTime()) / (60 * 1000)))
+      const energyUsed = Number(durationMinutes) * Number(port?.PortTypeOfKwh || 0)
+      res.json({
+        success: true,
+        message: "Charging session ended successfully",
+        data: {
+          sessionId,
+          energyUsed,
+          sessionPrice: Number(cs.SessionPrice) || 0,
+          endTime: cs.CheckoutTime,
+          status: "COMPLETED",
+        },
+      })
     } catch (error) {
       next(error)
     }
@@ -70,43 +112,83 @@ export class ChargingSessionController {
     }
   }
 
+  async addPenalty(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params
+      const { penaltyFee } = req.body
+      if (penaltyFee === undefined) {
+        res.status(400).json({ success: false, message: "Penalty fee is required" })
+        return
+      }
+      const sessionId = Number(id)
+      await chargingSessionService.addPenalty(sessionId, Number(penaltyFee))
 
-  // async addPenalty(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-  //   try {
-  //     const { id } = req.params
-  //     const { penaltyFee } = req.body
+      const pool = await getDbPool()
+      const sRes = await pool
+        .request()
+        .input("SessionId", sessionId)
+        .query(`SELECT SessionPrice, PenaltyFee FROM [ChargingSession] WHERE SessionId = @SessionId`)
+      const s = sRes.recordset[0] || { SessionPrice: 0, PenaltyFee: 0 }
 
-  //     if (!penaltyFee) {
-  //       res.status(400).json({ message: "Penalty fee is required" })
-  //       return
-  //     }
+      res.json({
+        success: true,
+        message: "Penalty fee added successfully",
+        data: {
+          sessionId,
+          sessionPrice: Number(s.SessionPrice) || 0,
+          penaltyFee: Number(s.PenaltyFee) || 0,
+          totalWithPenalty: Number(s.SessionPrice || 0) + Number(s.PenaltyFee || 0),
+        },
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
 
-  //     await chargingSessionService.addPenalty(Number(id), penaltyFee)
-  //     res.json({ success: true, message: "Penalty added successfully" })
-  //   } catch (error) {
-  //     next(error)
-  //   }
-  // }
-
-  // async calculateSessionPrice(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-  //   try {
-  //     const { id } = req.params
-  //     const { discountPercent } = req.query
-
-  //     const price = await chargingSessionService.calculateSessionPrice(Number(id), Number(discountPercent) || 0)
-  //     res.json({ success: true, data: { price } })
-  //   } catch (error) {
-  //     next(error)
-  //   }
-  // }
+  async calculateSessionPrice(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params
+      const { discountPercent } = req.query
+      const price = await chargingSessionService.calculateSessionPrice(Number(id), Number(discountPercent) || 0)
+      res.json({ success: true, data: { price } })
+    } catch (error) {
+      next(error)
+    }
+  }
   
 
   async generateInvoice(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = req.user?.userId
       const { id } = req.params
-      const invoice = await chargingSessionService.generateInvoiceService(Number(id), userId  || 0)
-      res.status(201).json({ success: true, data: invoice })
+      const sessionId = Number(id)
+      await chargingSessionService.generateInvoiceService(sessionId, userId  || 0)
+
+      const pool = await getDbPool()
+      const invRes = await pool
+        .request()
+        .input("SessionId", sessionId)
+        .query(`SELECT TOP 1 InvoiceId, TotalAmount as totalAmount, PaidStatus FROM [Invoice] WHERE SessionId = @SessionId ORDER BY InvoiceId DESC`)
+      const inv = invRes.recordset[0]
+      const sRes = await pool
+        .request()
+        .input("SessionId", sessionId)
+        .query(`SELECT SessionPrice, PenaltyFee FROM [ChargingSession] WHERE SessionId = @SessionId`)
+      const s = sRes.recordset[0] || { SessionPrice: 0, PenaltyFee: 0 }
+
+      res.status(201).json({
+        success: true,
+        message: "Invoice generated and stored successfully",
+        data: {
+          invoiceId: inv?.InvoiceId || null,
+          sessionId,
+          sessionPrice: Number(s.SessionPrice) || 0,
+          penaltyFee: Number(s.PenaltyFee) || 0,
+          totalAmount: Number(inv?.totalAmount || (s.SessionPrice || 0) + (s.PenaltyFee || 0)),
+          PaidStatus: String(inv?.PaidStatus ?? "Pending"),
+          createdAt: new Date().toISOString(),
+        },
+      })
     } catch (error) {
       next(error)
     }

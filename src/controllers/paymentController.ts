@@ -63,17 +63,12 @@ export class PaymentController {
   }
 
   async createInvoice(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    // Deprecated: invoices are generated within charging session flow. Keep for backward compatibility if still called.
     try {
-      const { monthYear, totalAmount,companyId } = req.body
-      const userId = req.user?.userId
-
-      if (!userId || !monthYear || !totalAmount) {
-        res.status(400).json({ message: "Missing required fields" })
-        return
-      }
-
-      const invoice = await paymentService.createInvoice(userId, companyId, monthYear, totalAmount)
-      res.status(201).json({ success: true, data: invoice })
+      res.status(410).json({
+        success: false,
+        message: "Deprecated endpoint: Invoice creation now handled by /charging-sessions/:id/invoice",
+      })
     } catch (error) {
       next(error)
     }
@@ -101,8 +96,8 @@ export class PaymentController {
         res.status(401).json({ message: "Unauthorized" })
         return
       }
-
-      const invoices = await paymentService.getInvoices(userId)
+      // Fetch ONLY invoices tied to charging sessions (session-based invoices)
+      const invoices = await paymentService.getSessionInvoices(userId)
       res.status(200).json({ success: true, data: invoices })
     } catch (error) {
       next(error)
@@ -112,7 +107,7 @@ export class PaymentController {
   async getCompanyInvoices(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { companyId } = req.params
-      const invoices = await paymentService.getCompanyInvoices(Number(companyId))
+      const invoices = await paymentService.getCompanySessionInvoices(Number(companyId))
       res.status(200).json({ success: true, data: invoices })
     } catch (error) {
       next(error)
@@ -154,15 +149,14 @@ export class PaymentController {
   async getMonthlyReport(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = req.user?.userId
-      const { monthYear } = req.query
-
-      if (!userId || !monthYear) {
-        res.status(400).json({ message: "Missing required parameters" })
+      if (!userId) {
+        res.status(401).json({ message: "Unauthorized" })
         return
       }
 
-      const report = await paymentService.getMonthlyReport(userId, monthYear as string)
-      res.status(200).json({ success: true, data: report })
+      // Return all month summaries instead of a single month
+      const reports = await paymentService.getMonthlyReports(userId)
+      res.status(200).json({ success: true, data: reports })
     } catch (error) {
       next(error)
     }
