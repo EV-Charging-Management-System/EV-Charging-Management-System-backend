@@ -136,12 +136,12 @@ export class AdminController {
   }
   async createPoint(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { stationId, pointName } = req.body
-      if (!stationId || !pointName) {
-        res.status(400).json({ message: "stationId and pointName are required" })
+      const { stationId, numberOfPort } = req.body
+      if (!stationId || numberOfPort === undefined) {
+        res.status(400).json({ message: "stationId and numberOfPort are required" })
         return
       }
-      const newPoint = await adminService.createPoint(stationId, pointName)
+      const newPoint = await adminService.createPoint(stationId, numberOfPort)
       res.status(201).json({ success: true, data: newPoint, message: "Point created successfully" })
     } catch (error) {
       next(error)
@@ -149,12 +149,16 @@ export class AdminController {
   }
   async updatePoint(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { pointId, pointName } = req.body
-      if (!pointId || !pointName) {
-        res.status(400).json({ message: "pointId and pointName are required" })
+      const { pointId, numberOfPort, chargingPointStatus } = req.body
+      if (!pointId) {
+        res.status(400).json({ message: "pointId is required" })
         return
       }
-      await adminService.updatePoint(pointId, pointName)
+      if (numberOfPort === undefined && !chargingPointStatus) {
+        res.status(400).json({ message: "At least one of numberOfPort or chargingPointStatus is required" })
+        return
+      }
+      await adminService.updatePoint(pointId, numberOfPort, chargingPointStatus)
       res.json({ success: true, message: "Point updated successfully" })
     } catch (error) {
       next(error)
@@ -173,14 +177,22 @@ export class AdminController {
       next(error)
     }
   }
+
   async createPort(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { pointId, portName } = req.body
-      if (!pointId || !portName) {
-        res.status(400).json({ message: "pointId and portName are required" })
+      const { pointId, portName, portType, portTypeOfKwh, portTypePrice, portStatus } = req.body
+      if (!pointId || !portName || !portType || portTypeOfKwh === undefined || portTypePrice === undefined) {
+        res.status(400).json({ message: "pointId, portName, portType, portTypeOfKwh, and portTypePrice are required" })
         return
       }
-      const newPort = await adminService.createPort(pointId, portName)
+      const newPort = await adminService.createPort(
+        pointId,
+        portName,
+        portType,
+        portTypeOfKwh,
+        portTypePrice,
+        portStatus,
+      )
       res.status(201).json({ success: true, data: newPort, message: "Port created successfully" })
     } catch (error) {
       next(error)
@@ -188,12 +200,12 @@ export class AdminController {
   }
   async updatePort(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { portId, portName } = req.body
-      if (!portId || !portName) {
-        res.status(400).json({ message: "portId and portName are required" })
+      const { portId, portName, portType, chargingPortType, portTypeOfKwh, portTypePrice, portStatus } = req.body
+      if (!portId) {
+        res.status(400).json({ message: "portId is required" })
         return
       }
-      await adminService.updatePort(portId, portName)
+      await adminService.updatePort(portId, portName, portType, chargingPortType, portTypeOfKwh, portTypePrice, portStatus)
       res.json({ success: true, message: "Port updated successfully" })
     } catch (error) {
       next(error)
