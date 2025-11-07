@@ -20,5 +20,7 @@ router.post("/createstaff", adminController.createStaff)
 router.get("/getAllStaff", adminController.getAllStaff)
 
 router.patch('/deleteStation',adminController.deleteStationById)
-router.patch('/createPoint',adminController.createPoint)
+router.post('/createPoint',adminController.createPoint)
+router.post('/updatePoint',adminController.updatePoint)
+router.patch('/deletePoint',adminController.deletePointById)
 export { router as adminRoutes }

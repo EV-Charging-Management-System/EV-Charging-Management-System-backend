@@ -258,6 +258,34 @@ export class AdminService {
       throw new Error("Error creating charging point: " + error)
     }
   }
+  async updatePoint(pointId: number, pointName: string): Promise<void> {
+    const pool = await getDbPool()
+    try {
+      await pool.request()
+        .input("PointId", pointId)
+        .input("PointName", pointName)
+        .query(`
+          UPDATE [ChargingPoint]
+          SET PointName = @PointName
+          WHERE PointId = @PointId
+        `)
+    } catch (error) {
+      throw new Error("Error updating charging point: " + error)
+    }
+  }
+  async deletePointById(pointId: number): Promise<void> {
+    const pool = await getDbPool()
+    try {
+      await pool.request()
+        .input("PointId", pointId)
+        .query(`
+          DELETE FROM [ChargingPoint]
+          WHERE PointId = @PointId
+        `)
+    } catch (error) {
+      throw new Error("Error deleting charging point: " + error)
+    }
+  }
 }
 
 export const adminService = new AdminService()

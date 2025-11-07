@@ -147,5 +147,31 @@ export class AdminController {
       next(error)
     }
   }
+  async updatePoint(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { pointId, pointName } = req.body
+      if (!pointId || !pointName) {
+        res.status(400).json({ message: "pointId and pointName are required" })
+        return
+      }
+      await adminService.updatePoint(pointId, pointName)
+      res.json({ success: true, message: "Point updated successfully" })
+    } catch (error) {
+      next(error)
+    }
+  }
+  async deletePointById(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { pointId } = req.body
+      if (!pointId) {
+        res.status(400).json({ message: "pointId is required" })
+        return
+      }
+      await adminService.deletePointById(pointId)
+      res.json({ success: true, message: "Point deleted successfully" })
+    } catch (error) {
+      next(error)
+    }
+  }
 }
 export const adminController = new AdminController()
