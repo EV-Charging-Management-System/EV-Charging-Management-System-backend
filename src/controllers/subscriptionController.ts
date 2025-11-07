@@ -45,7 +45,7 @@ class SubscriptionController {
         SELECT TOP 1 *
         FROM [Subscription]
         WHERE UserId = @UserId
-        ORDER BY StartDate DESC;
+        ORDER BY StartDate DESC, SubscriptionId DESC; -- ✅ tie-break to pick latest row when same StartDate (DATE)
       `);
 
     const sub = result.recordset[0];
@@ -125,6 +125,8 @@ class SubscriptionController {
       orderInfo,
       txnRef,
       ipAddr: ipAddr.replace("::ffff:", ""),
+      
+      returnUrl: process.env.VNP_RETURN_API_URL || "http://localhost:5000/api/vnpay/return",
     });
 
     // 🧩 3️⃣ (Optional) Persist TxnRef/PaymentMethod — skipped due to current DB schema

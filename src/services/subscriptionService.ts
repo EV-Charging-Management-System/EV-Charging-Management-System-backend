@@ -95,6 +95,7 @@ class SubscriptionService {
         orderInfo,
         txnRef,
         ipAddr: IpAddr,
+        returnUrl: process.env.VNP_RETURN_API_URL || "http://localhost:5000/api/vnpay/return",
       });
 
       // 4️⃣ (Optional) Persist TxnRef in DB — skipped due to current schema without TxnRef column
