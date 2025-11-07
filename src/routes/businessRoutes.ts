@@ -26,4 +26,7 @@ router.get("/overview/:companyId", authenticate, businessController.getCompanyOv
 // 🔌 Tất cả lịch sạc của mọi xe doanh nghiệp
 router.get("/session/:companyId", authenticate, businessController.getCompanySessions);
 
+// 💰 Tổng quan payments của user theo biển số trong công ty
+router.get("/payments/summary-by-plate", authenticate, businessController.getPaymentsSummaryByPlate);
+
 export { router as businessRoutes };

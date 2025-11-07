@@ -460,7 +460,78 @@ export class BusinessController {
     }
   }
 
-  // �📄 Invoices & Payments theo biển số xe trong công ty
+  // � Tổng quan payment của user sở hữu xe theo biển số trong công ty (all-time)
+  async getPaymentsSummaryByPlate(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { licensePlate, companyId } = req.query as { licensePlate?: string; companyId?: string };
+      if (!licensePlate || !companyId) {
+        res.status(400).json({ success: false, message: "licensePlate và companyId là bắt buộc" });
+        return;
+      }
+
+      const cid = Number(companyId);
+      if (isNaN(cid)) {
+        res.status(400).json({ success: false, message: "companyId không hợp lệ" });
+        return;
+      }
+
+      const pool = await getDbPool();
+
+      const vRs = await pool
+        .request()
+        .input("LicensePlate", VarChar(100), licensePlate)
+        .query(`SELECT TOP 1 VehicleId, CompanyId, UserId, VehicleName FROM [Vehicle] WHERE LicensePlate = @LicensePlate`);
+      const vehicle = vRs.recordset[0];
+      if (!vehicle || vehicle.CompanyId !== cid) {
+        res.status(404).json({ success: false, message: "Không tìm thấy xe thuộc công ty" });
+        return;
+      }
+
+      const userId = vehicle.UserId;
+      if (!userId) {
+        res.status(404).json({ success: false, message: "Xe chưa có user sở hữu" });
+        return;
+      }
+
+      const uRs = await pool.request().input("UserId", Int, userId).query(`SELECT UserId, UserName FROM [User] WHERE UserId = @UserId`);
+      const user = uRs.recordset[0];
+
+      const sumsRs = await pool
+        .request()
+        .input("UserId", Int, userId)
+        .query(`
+          SELECT 
+            COUNT(*) AS CountPayments,
+            ISNULL(SUM(TotalAmount),0) AS TotalAmount,
+            ISNULL(SUM(CASE WHEN PaymentStatus IN ('Paid','PAID') THEN TotalAmount ELSE 0 END),0) AS PaidAmount,
+            ISNULL(SUM(CASE WHEN PaymentStatus = 'Pending' THEN TotalAmount ELSE 0 END),0) AS PendingAmount
+          FROM [Payment]
+          WHERE UserId = @UserId
+        `);
+
+      const row = sumsRs.recordset[0] || { CountPayments: 0, TotalAmount: 0, PaidAmount: 0, PendingAmount: 0 };
+
+      res.status(200).json({
+        success: true,
+        data: {
+          companyId: cid,
+          licensePlate,
+          user: user ? { userId: user.UserId, name: user.UserName } : null,
+          paymentsSummary: {
+            totalCount: Number(row.CountPayments || 0),
+            totalAmount: Number(row.TotalAmount || 0),
+            paidAmount: Number(row.PaidAmount || 0),
+            pendingAmount: Number(row.PendingAmount || 0),
+          },
+        },
+      });
+    } catch (error) {
+      console.error("❌ Lỗi trong getPaymentsSummaryByPlate:", error);
+      next(error);
+    }
+  }
+
+  // ��📄 Invoices & Payments theo biển số xe trong công ty
   async getInvoicePaymentByPlate(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { licensePlate, companyId } = req.query as { licensePlate?: string; companyId?: string };
