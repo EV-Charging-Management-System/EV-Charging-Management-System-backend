@@ -4,9 +4,10 @@ export class ChargingSessionService {
   async startSession(bookingId: number, vehicleId: number, stationId: number, pointId: number, portId: number, batteryPercentage: number): Promise<any> {
     const pool = await getDbPool()
     try {
- 
+      const status = "DONE"
+      await pool.request().input("status", status).input("bookingid", bookingId).query("UPDATE [Booking] SET [Status] = @Status WHERE BookingId = @BookingId")
          const now = new Date(Date.now() + 7 * 60 * 60 * 1000)
-const checkinTime = now.toISOString().slice(0, 19).replace('T', ' ')
+      const checkinTime = now.toISOString().slice(0, 19).replace('T', ' ')
       const chargingStatus = "ONGOING"
       const X = await pool.request().input("VehicleId", vehicleId).query("SELECT * FROM [Vehicle] WHERE VehicleId = @VehicleId")
       const Battery = X.recordset[0]?.Battery
