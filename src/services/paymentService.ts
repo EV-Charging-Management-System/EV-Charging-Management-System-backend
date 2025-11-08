@@ -245,15 +245,34 @@ export class PaymentService {
   async payInvoice(invoiceId: number, paymentMethod: string): Promise<void> {
     const pool = await getDbPool()
     try {
-      await pool
+      // 1. Check invoice existence & current status
+      const existing = await pool
+        .request()
+        .input("InvoiceId", invoiceId)
+        .query(`SELECT InvoiceId, PaidStatus FROM [Invoice] WHERE InvoiceId = @InvoiceId`)
+
+      if (existing.recordset.length === 0) {
+        throw new Error(`Invoice ${invoiceId} not found`) // Will be caught below and wrapped
+      }
+
+      const currentStatus = existing.recordset[0].PaidStatus
+      if (currentStatus === "Paid") {
+        throw new Error(`Invoice ${invoiceId} is already paid`) // Prevent misleading success response
+      }
+
+      // 2. Perform update
+      const updateResult = await pool
         .request()
         .input("InvoiceId", invoiceId)
         .input("PaymentMethod", paymentMethod)
-        .query(`
-          UPDATE [Invoice] SET PaidStatus = 'Paid' WHERE InvoiceId = @InvoiceId
-        `)
+        .query(`UPDATE [Invoice] SET PaidStatus = 'Paid' WHERE InvoiceId = @InvoiceId`)
+
+      // 3. Validate that a row was actually affected (defensive, though existence was checked)
+      if (!updateResult.rowsAffected || updateResult.rowsAffected[0] === 0) {
+        throw new Error(`Failed to update invoice ${invoiceId}`)
+      }
     } catch (error) {
-      throw new Error("Error paying invoice")
+      throw new Error("Error paying invoice: " + (error instanceof Error ? error.message : String(error)))
     }
   }
 
