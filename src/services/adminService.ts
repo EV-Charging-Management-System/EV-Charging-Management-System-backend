@@ -267,8 +267,8 @@ export class AdminService {
         .input("userName", userName)
         .input("password", hashed)
         .query(`
-          INSERT INTO [User] ([Mail], [UserName], [PassWord], [RoleName], [Status])
-          VALUES (@mail, @userName, @password, 'STAFF', 'ACTIVE');
+          INSERT INTO [User] ([Mail], [UserName], [PassWord], [RoleName])
+          VALUES (@mail, @userName, @password, 'STAFF');
           SELECT SCOPE_IDENTITY() AS UserId;
         `);
 
