@@ -4,9 +4,10 @@ export class ChargingSessionService {
   async startSession(bookingId: number, vehicleId: number, stationId: number, pointId: number, portId: number, batteryPercentage: number): Promise<any> {
     const pool = await getDbPool()
     try {
- 
+      const status = "DONE"
+      await pool.request().input("status", status).input("bookingid", bookingId).query("UPDATE [Booking] SET [Status] = @Status WHERE BookingId = @BookingId")
          const now = new Date(Date.now() + 7 * 60 * 60 * 1000)
-const checkinTime = now.toISOString().slice(0, 19).replace('T', ' ')
+      const checkinTime = now.toISOString().slice(0, 19).replace('T', ' ')
       const chargingStatus = "ONGOING"
       const X = await pool.request().input("VehicleId", vehicleId).query("SELECT * FROM [Vehicle] WHERE VehicleId = @VehicleId")
       const Battery = X.recordset[0]?.Battery
@@ -43,7 +44,7 @@ const checkinTime = now.toISOString().slice(0, 19).replace('T', ' ')
     try {
       
       const now = new Date(Date.now() + 7 * 60 * 60 * 1000)
-const checkoutTime = now.toISOString().slice(0, 19).replace('T', ' ')
+      const checkoutTime = now.toISOString().slice(0, 19).replace('T', ' ')
 
       // Ensure the session belongs to the user via Booking
       const result = await pool
@@ -68,6 +69,8 @@ const checkoutTime = now.toISOString().slice(0, 19).replace('T', ' ')
         .query(`
           SELECT * FROM [ChargingPort] WHERE PortId = @PortId
         `);
+        const status = "AVAILABLE"
+      await pool.request().input("status", status).input("portid", port.recordset[0].PortId).query("UPDATE [ChargingPort] SET [PortStatus] = @Status WHERE PortId = @PortId")
       if (session.recordset.length === 0) {
         throw new Error("Session not found")
       }
@@ -264,11 +267,11 @@ const checkoutTime = now.toISOString().slice(0, 19).replace('T', ' ')
   async startSessionForGuest(stationId: number, pointId: number, portId: number, battery : number, batteryPercentage: number): Promise<any> {
     const pool = await getDbPool()
     try {
- 
+      const status = "IN_USE"
+      await pool.request().input("status", status).input("portid", portId).query("UPDATE [ChargingPort] SET [PortStatus] = @Status WHERE PortId = @PortId")
       const now = new Date(Date.now() + 7 * 60 * 60 * 1000)
       const checkinTime = now.toISOString().slice(0, 19).replace('T', ' ')
       const chargingStatus = "ONGOING"
-      const Battery = 250; // Giả sử pin đầy là 250 kWh
       const port = await pool.request().input("PortId", portId).query("SELECT * FROM [ChargingPort] WHERE PortId = @PortId")
       const kwh = port.recordset[0]?.PortTypeOfKwh
       const totaltime = Math.round((battery - (battery * batteryPercentage/100))/kwh)
@@ -297,7 +300,8 @@ const checkoutTime = now.toISOString().slice(0, 19).replace('T', ' ')
   async startSessionStaff(stationId: number, pointId: number, portId: number, licensePlate: string, batteryPercentage: number): Promise<any> {
     const pool = await getDbPool()
     try {
-      
+      const status = "IN_USE"
+      await pool.request().input("status", status).input("portid", portId).query("UPDATE [ChargingPort] SET [PortStatus] = @Status WHERE PortId = @PortId")
       const now = new Date(Date.now() + 7 * 60 * 60 * 1000)
       const checkinTime = now.toISOString().slice(0, 19).replace('T', ' ')
       const chargingStatus = "ONGOING"

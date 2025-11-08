@@ -28,4 +28,12 @@ router.get("/getAllStaff", adminController.getAllStaff);
 router.get("/reports/revenue", adminController.getRevenueReport);
 router.get("/reports/usage", adminController.getUsageReport);
 
+
+router.patch('/deleteStation',adminController.deleteStationById)
+router.post('/createPoint',adminController.createPoint)
+router.put('/updatePoint',adminController.updatePoint)
+router.delete('/deletePoint',adminController.deletePointById)
+router.post('/createPort',adminController.createPort)
+router.put('/updatePort',adminController.updatePort)
+router.delete('/deletePort',adminController.deletePortById)
 export { router as adminRoutes };

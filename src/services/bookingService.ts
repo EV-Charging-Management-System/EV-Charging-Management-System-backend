@@ -18,6 +18,8 @@ export class BookingService {
   async createBooking(params: CreateBookingParams): Promise<any> {
   const pool = await getDbPool()
   try {
+    const status1 = "IN_USE"
+      await pool.request().input("status", status1).input("portid", params.portId).query("UPDATE [ChargingPort] SET [PortStatus] = @Status WHERE PortId = @PortId")
     const status = "ACTIVE"
     const qr = params.qr || uuidv4()
 
