@@ -395,22 +395,19 @@ export class BusinessController {
         return;
       }
 
-      // Aggregate payments for the company using Payment->Invoice OR Payment->Session->Vehicle
+      // Aggregate by invoices for the company to avoid misattribution (pay-all payments have no InvoiceId)
       const agg = await pool
         .request()
         .input("CompanyId", Int, info.CompanyId)
         .query(`
           SELECT 
-            COUNT(DISTINCT p.PaymentId) AS totalPayments,
-            ISNULL(SUM(p.TotalAmount), 0) AS totalAmount
-          FROM [Payment] p
-          LEFT JOIN [Invoice] i ON p.InvoiceId = i.InvoiceId
-          LEFT JOIN [ChargingSession] cs ON p.SessionId = cs.SessionId
-          LEFT JOIN [Vehicle] v ON cs.VehicleId = v.VehicleId
-          WHERE (i.CompanyId = @CompanyId OR v.CompanyId = @CompanyId) AND p.PaymentStatus IN ('Paid','PAID')
+            COUNT(*) AS totalInvoicesPaid,
+            ISNULL(SUM(TotalAmount), 0) AS totalAmount
+          FROM [Invoice]
+          WHERE CompanyId = @CompanyId AND PaidStatus IN ('Paid','PAID')
         `);
 
-      const totalPayments = agg.recordset[0]?.totalPayments || 0;
+      const totalPayments = agg.recordset[0]?.totalInvoicesPaid || 0;
       const totalAmount = agg.recordset[0]?.totalAmount || 0;
 
       res.status(200).json({
@@ -429,19 +426,46 @@ export class BusinessController {
   // � Tất cả lịch sạc (ChargingSession) của mọi xe trong doanh nghiệp
   async getCompanySessions(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { companyId } = req.params as { companyId: string };
-      const cid = Number(companyId);
-      if (isNaN(cid)) {
-        res.status(400).json({ success: false, message: "companyId không hợp lệ" });
+      const tokenUserId = req.user?.userId;
+      if (!tokenUserId) {
+        res.status(401).json({ success: false, message: "Unauthorized" });
         return;
       }
 
+      const { companyId } = req.params as { companyId: string };
+      const { bookingId } = req.query as { bookingId?: string };
+
       const pool = await getDbPool();
 
-      const rs = await pool
+      // Always derive company from authenticated user to avoid leaking other companies' data
+      const userRs = await pool
         .request()
-        .input("CompanyId", Int, cid)
-        .query(`
+        .input("UserId", Int, tokenUserId)
+        .query(`SELECT TOP 1 CompanyId FROM [User] WHERE UserId = @UserId`);
+      const userCompanyId = userRs.recordset[0]?.CompanyId as number | undefined;
+
+      if (!userCompanyId) {
+        res.status(403).json({ success: false, message: "User does not belong to any company" });
+        return;
+      }
+
+      // Optional: if path param provided but doesn't match user's company, reject
+      if (companyId && Number(companyId) !== userCompanyId) {
+        res.status(403).json({ success: false, message: "Forbidden: company mismatch" });
+        return;
+      }
+
+      const request = pool.request().input("CompanyId", Int, userCompanyId);
+      let whereClause = "v.CompanyId = @CompanyId";
+      if (bookingId) {
+        const bid = Number(bookingId);
+        if (!isNaN(bid)) {
+          request.input("BookingId", Int, bid);
+          whereClause += " AND cs.BookingId = @BookingId";
+        }
+      }
+
+      const rs = await request.query(`
           SELECT 
             cs.SessionId, cs.StationId, cs.PointId, cs.PortId, cs.BookingId, cs.VehicleId,
             cs.TotalTime, cs.ChargingStatus, cs.Pause, cs.SessionPrice, cs.CheckinTime, cs.CheckoutTime,
@@ -449,7 +473,7 @@ export class BusinessController {
             v.LicensePlate, v.VehicleName
           FROM [ChargingSession] cs
           INNER JOIN [Vehicle] v ON cs.VehicleId = v.VehicleId
-          WHERE v.CompanyId = @CompanyId
+          WHERE ${whereClause}
           ORDER BY cs.CheckoutTime DESC, cs.SessionId DESC
         `);
 
