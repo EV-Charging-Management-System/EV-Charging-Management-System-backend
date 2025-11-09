@@ -62,6 +62,100 @@ export class VehicleService {
     }
   }
 
+  async registerByPlate(params: {
+    userId: number
+    role?: string
+    licensePlate: string
+    vehicleName?: string
+    vehicleType?: string
+    battery?: number
+  }): Promise<
+    | { status: "created"; vehicle: any }
+    | { status: "updated"; vehicle: any }
+    | { status: "exists-other-user"; vehicle?: any }
+  > {
+    const pool = await getDbPool()
+    const plate = params.licensePlate
+    try {
+      // Find existing vehicle by plate
+      const existing = await pool
+        .request()
+        .input("LicensePlate", plate)
+        .query(`
+          SELECT TOP 1 * FROM [Vehicle] WHERE LicensePlate = @LicensePlate
+        `)
+
+      if (!existing.recordset[0]) {
+        // Create new vehicle
+        const randomBattery = params.battery || randomInt(20, 100)
+
+        const insertResult = await pool
+          .request()
+          .input("UserId", params.userId)
+          .input("VehicleName", params.vehicleName || null)
+          .input("VehicleType", params.vehicleType || null)
+          .input("LicensePlate", plate)
+          .input("Battery", randomBattery)
+          .query(`
+            INSERT INTO [Vehicle] (UserId, VehicleName, VehicleType, LicensePlate, Battery)
+            OUTPUT INSERTED.VehicleId
+            VALUES (@UserId, @VehicleName, @VehicleType, @LicensePlate, @Battery)
+          `)
+
+        const newId = insertResult.recordset[0].VehicleId
+
+        // load with user/company info
+        const info = await pool
+          .request()
+          .input("VehicleId", newId)
+          .query(`
+            SELECT v.VehicleId, v.UserId, u.CompanyId, v.VehicleName, v.VehicleType, v.LicensePlate, v.Battery
+            FROM [Vehicle] v
+            JOIN [User] u ON v.UserId = u.UserId
+            WHERE v.VehicleId = @VehicleId
+          `)
+
+        return { status: "created", vehicle: mapVehicle(info.recordset[0]) }
+      }
+
+      const found = existing.recordset[0]
+      if (Number(found.UserId) !== Number(params.userId)) {
+        return { status: "exists-other-user" }
+      }
+
+      // Update owned vehicle with provided fields (if any)
+      const newName = params.vehicleName ?? found.VehicleName
+      const newType = params.vehicleType ?? found.VehicleType
+      const newBattery = params.battery ?? found.Battery
+
+      await pool
+        .request()
+        .input("VehicleId", found.VehicleId)
+        .input("VehicleName", newName)
+        .input("VehicleType", newType)
+        .input("Battery", newBattery)
+        .query(`
+          UPDATE [Vehicle]
+          SET VehicleName = @VehicleName, VehicleType = @VehicleType, Battery = @Battery
+          WHERE VehicleId = @VehicleId
+        `)
+
+      const updated = await pool
+        .request()
+        .input("VehicleId", found.VehicleId)
+        .query(`
+          SELECT v.VehicleId, v.UserId, u.CompanyId, v.VehicleName, v.VehicleType, v.LicensePlate, v.Battery
+          FROM [Vehicle] v
+          JOIN [User] u ON v.UserId = u.UserId
+          WHERE v.VehicleId = @VehicleId
+        `)
+
+      return { status: "updated", vehicle: mapVehicle(updated.recordset[0]) }
+    } catch (error) {
+      throw new Error("Error registering vehicle by plate: " + error)
+    }
+  }
+
   async updateVehicle(
     vehicleId: number,
     vehicleName: string,
@@ -126,3 +220,17 @@ export class VehicleService {
 }
 
 export const vehicleService = new VehicleService()
+
+// Helper to shape vehicle response
+function mapVehicle(row: any) {
+  if (!row) return null
+  return {
+    vehicleId: row.VehicleId,
+    userId: row.UserId,
+    companyId: row.CompanyId ?? null,
+    vehicleName: row.VehicleName ?? null,
+    vehicleType: row.VehicleType ?? null,
+    licensePlate: row.LicensePlate,
+    battery: row.Battery,
+  }
+}

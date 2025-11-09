@@ -1,13 +1,13 @@
 import { Int, NVarChar, Date as SqlDate } from "mssql";
 import { getDbPool } from "../config/database";
-import { buildVnpUrl } from "../utils/vnpay";
+import { buildVnpUrl } from "../utils/vnpay"; 
 
 class SubscriptionService {
-  // 🔹 Lấy tất cả gói Subscription (table: Subcription)
+  // 🔹 Lấy tất cả gói Subscription
   async getAllSubscriptions(): Promise<any[]> {
     const pool = await getDbPool();
     try {
-      const result = await pool.request().query(`SELECT * FROM [Subcription]`);
+      const result = await pool.request().query(`SELECT * FROM [Subscription]`);
       return result.recordset;
     } catch (error) {
       throw new Error("Error fetching subscriptions: " + error);
@@ -18,7 +18,10 @@ class SubscriptionService {
   async getSubscriptionById(id: number): Promise<any | null> {
     const pool = await getDbPool();
     try {
-      const result = await pool.request().input("SubcriptionId", Int, id).query(`SELECT * FROM [Subcription] WHERE SubcriptionId = @SubcriptionId`);
+      const result = await pool
+        .request()
+        .input("SubscriptionId", Int, id)
+        .query(`SELECT * FROM [Subscription] WHERE SubscriptionId = @SubscriptionId`);
       return result.recordset[0] || null;
     } catch (error) {
       throw new Error("Error fetching subscription: " + error);
@@ -34,7 +37,7 @@ class SubscriptionService {
     StartDate: string;
     DurationMonth?: string;
     IpAddr?: string;
-    Status?: string;
+    SubStatus?: string;
   }): Promise<any> {
     const pool = await getDbPool();
     try {
@@ -48,29 +51,43 @@ class SubscriptionService {
         IpAddr = "127.0.0.1",
       } = data;
 
-      // 1️⃣ Thêm mới bản ghi Subcription
+      // CompanyId is optional in the new schema. Use the user's CompanyId if not provided.
+      let finalCompanyId: number | null = CompanyId ?? null;
+      if ((finalCompanyId === null || finalCompanyId === undefined) && UserId) {
+        const userRow = await pool
+          .request()
+          .input("UserId", Int, UserId)
+          .query(`
+            SELECT u.CompanyId
+            FROM [User] u
+            WHERE u.UserId = @UserId
+          `);
+        const row = userRow.recordset[0];
+        finalCompanyId = row?.CompanyId ?? null;
+      }
+
+      // 1️⃣ Thêm mới bản ghi Subscription
       const insertResult = await pool
         .request()
         .input("UserId", Int, UserId)
-        .input("CompanyId", Int, CompanyId)
+        .input("CompanyId", Int, finalCompanyId)
         .input("PackageId", Int, PackageId)
-        .input("StartMonth", NVarChar(100), StartMonth)
+        .input("StartMonth", NVarChar(100), StartMonth ?? "") 
         .input("StartDate", SqlDate, StartDate)
-        .input("DurationMonth", NVarChar(100), DurationMonth)
-        .input("PaymentMethod", NVarChar(50), "VNPAY")
-        .input("Status", NVarChar(20), "PENDING")
+        .input("DurationMonth", NVarChar(100), DurationMonth ?? "") 
+        .input("SubStatus", NVarChar(20), "PENDING")
         .query(`
-            INSERT INTO [Subcription]
-            (UserId, CompanyId, PackageId, StartMonth, StartDate, DurationMonth, PaymentMethod, Status)
-                OUTPUT INSERTED.*
-            VALUES (@UserId, @CompanyId, @PackageId, @StartMonth, @StartDate, @DurationMonth, @PaymentMethod, @Status)
+          INSERT INTO [Subscription]
+          (UserId, CompanyId, PackageId, StartMonth, StartDate, DurationMonth, SubStatus)
+            OUTPUT INSERTED.*
+          VALUES (@UserId, @CompanyId, @PackageId, @StartMonth, @StartDate, @DurationMonth, @SubStatus)
         `);
 
       const subscription = insertResult.recordset[0];
 
       // 2️⃣ Sinh mã giao dịch duy nhất (TxnRef)
-      const txnRef = `SUB_${subscription.SubcriptionId}_${Date.now()}`;
-      const orderInfo = `Thanh toán gói Premium #${subscription.SubcriptionId}`;
+      const txnRef = `SUB_${subscription.SubscriptionId}_${Date.now()}`;
+      const orderInfo = `Thanh toán gói Premium #${subscription.SubscriptionId}`;
 
       // 3️⃣ Sinh URL thanh toán VNPay
       const vnpUrl = buildVnpUrl({
@@ -78,14 +95,10 @@ class SubscriptionService {
         orderInfo,
         txnRef,
         ipAddr: IpAddr,
+        returnUrl: process.env.VNP_RETURN_API_URL || "http://localhost:5000/api/vnpay/return",
       });
 
-      // 4️⃣ Cập nhật lại TxnRef vào DB
-      await pool
-        .request()
-        .input("SubcriptionId", Int, subscription.SubcriptionId)
-        .input("TxnRef", NVarChar(200), txnRef)
-        .query(`UPDATE [Subcription] SET TxnRef = @TxnRef WHERE SubcriptionId = @SubcriptionId`);
+      // 4️⃣ (Optional) Persist TxnRef in DB — skipped due to current schema without TxnRef column
 
       // 5️⃣ Trả kết quả cho FE
       return {
@@ -93,7 +106,7 @@ class SubscriptionService {
         TxnRef: txnRef,
         vnpUrl,
       };
-    } catch (error) {
+    } catch (error: any) {
       throw new Error("Error creating subscription: " + error);
     }
   }
@@ -110,7 +123,7 @@ class SubscriptionService {
       DurationMonth?: string;
       PaymentMethod?: string;
       TxnRef?: string;
-      Status?: string;
+      SubStatus?: string;
     }
   ): Promise<any> {
     const pool = await getDbPool();
@@ -124,36 +137,30 @@ class SubscriptionService {
       const StartMonth = data.StartMonth ?? existing.StartMonth;
       const StartDate = data.StartDate ?? existing.StartDate;
       const DurationMonth = data.DurationMonth ?? existing.DurationMonth;
-      const PaymentMethod = data.PaymentMethod ?? existing.PaymentMethod;
-      const TxnRef = data.TxnRef ?? existing.TxnRef;
-      const Status = data.Status ?? existing.Status;
+      const SubStatus = data.SubStatus ?? existing.SubStatus;
 
       const result = await pool
         .request()
-        .input("SubcriptionId", Int, id)
+        .input("SubscriptionId", Int, id)
         .input("UserId", Int, UserId)
         .input("CompanyId", Int, CompanyId)
         .input("PackageId", Int, PackageId)
-        .input("StartMonth", NVarChar(100), StartMonth)
+        .input("StartMonth", NVarChar(100), StartMonth ?? "") 
         .input("StartDate", SqlDate, StartDate)
-        .input("DurationMonth", NVarChar(100), DurationMonth)
-        .input("PaymentMethod", NVarChar(50), PaymentMethod)
-        .input("TxnRef", NVarChar(200), TxnRef)
-        .input("Status", NVarChar(20), Status)
+        .input("DurationMonth", NVarChar(100), String(DurationMonth ?? ""))
+        .input("SubStatus", NVarChar(20), SubStatus)
         .query(`
-            UPDATE [Subcription]
-            SET
-                UserId = @UserId,
-                CompanyId = @CompanyId,
-                PackageId = @PackageId,
-                StartMonth = @StartMonth,
-                StartDate = @StartDate,
-                DurationMonth = @DurationMonth,
-                PaymentMethod = @PaymentMethod,
-                TxnRef = @TxnRef,
-                Status = @Status
-                OUTPUT INSERTED.*
-            WHERE SubcriptionId = @SubcriptionId
+          UPDATE [Subscription]
+          SET
+            UserId = @UserId,
+            CompanyId = @CompanyId,
+            PackageId = @PackageId,
+            StartMonth = @StartMonth,
+            StartDate = @StartDate,
+            DurationMonth = @DurationMonth,
+            SubStatus = @SubStatus
+            OUTPUT INSERTED.*
+          WHERE SubscriptionId = @SubscriptionId
         `);
 
       return result.recordset[0];
@@ -166,7 +173,10 @@ class SubscriptionService {
   async deleteSubscription(id: number): Promise<boolean> {
     const pool = await getDbPool();
     try {
-      const result = await pool.request().input("SubcriptionId", Int, id).query(`DELETE FROM [Subcription] WHERE SubcriptionId = @SubcriptionId`);
+      const result = await pool
+        .request()
+        .input("SubscriptionId", Int, id)
+        .query(`DELETE FROM [Subscription] WHERE SubscriptionId = @SubscriptionId`);
       return result.rowsAffected[0] > 0;
     } catch (error) {
       throw new Error("Error deleting subscription: " + error);

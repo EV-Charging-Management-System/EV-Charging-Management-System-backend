@@ -4,7 +4,7 @@ import { subscriptionService } from "../services/subscriptionService";
 import { buildVnpUrl } from "../utils/vnpay";
 import type { NextFunction, Response } from "express";
 import { getDbPool } from "../config/database";
-import { Int, DateTime, NVarChar } from "mssql";
+import { Int } from "mssql";
 
 class SubscriptionController {
   // 🟢 1️⃣ Lấy tất cả gói subscription (Admin/Staff)
@@ -43,9 +43,9 @@ class SubscriptionController {
       .input("UserId", Int, userId)
       .query(`
         SELECT TOP 1 *
-        FROM [Subcription]
+        FROM [Subscription]
         WHERE UserId = @UserId
-        ORDER BY StartDate DESC;
+        ORDER BY StartDate DESC, SubscriptionId DESC; -- ✅ tie-break to pick latest row when same StartDate (DATE)
       `);
 
     const sub = result.recordset[0];
@@ -64,15 +64,15 @@ class SubscriptionController {
     expireDate.setMonth(startDate.getMonth() + Number(sub.DurationMonth));
 
     const now = new Date();
-    let status = sub.Status;
-    if (status === "ACTIVE" && now > expireDate) {
-      status = "EXPIRED";
+    let subStatus = sub.SubStatus;
+    if (subStatus === "ACTIVE" && now > expireDate) {
+      subStatus = "EXPIRED";
 
       // 🔄 Nếu đã hết hạn thì update DB
-      await pool.request().input("SubcriptionId", Int, sub.SubcriptionId).query(`
-        UPDATE [Subcription]
-        SET Status = 'EXPIRED'
-        WHERE SubcriptionId = @SubcriptionId;
+      await pool.request().input("SubscriptionId", Int, sub.SubscriptionId).query(`
+        UPDATE [Subscription]
+        SET SubStatus = 'EXPIRED'
+        WHERE SubscriptionId = @SubscriptionId;
       `);
     }
 
@@ -80,17 +80,12 @@ class SubscriptionController {
       success: true,
       message: "Fetched current user's subscription successfully",
       data: {
-        SubcriptionId: sub.SubcriptionId,
+        SubscriptionId: sub.SubscriptionId,
         PackageId: sub.PackageId,
-        Status: status,
-        PaymentMethod: sub.PaymentMethod,
-        TxnRef: sub.TxnRef,
+        SubStatus: subStatus,
         StartDate: sub.StartDate,
-        PaymentDate: sub.PaymentDate,
         DurationMonth: sub.DurationMonth,
-        DepositAmount: sub.DepositAmount,
-        IsDeposited: sub.IsDeposited,
-        ExpireDate: expireDate, // 👈 thêm ngày hết hạn cho FE
+        ExpireDate: expireDate, 
       },
     });
   });
@@ -104,7 +99,7 @@ class SubscriptionController {
     if (!PackageId) throw createError("PackageId is required", 400, "VALIDATION_ERROR");
     if (!StartDate) throw createError("StartDate is required", 400, "VALIDATION_ERROR");
 
-    // 🧩 1️⃣ Tạo bản ghi trong bảng [Subcription]
+    // 🧩 1️⃣ Tạo bản ghi trong bảng [Subscription]
     const created = await subscriptionService.createSubscription({
       UserId: userId,
       CompanyId,
@@ -112,14 +107,15 @@ class SubscriptionController {
       StartMonth,
       StartDate,
       DurationMonth,
+      SubStatus: "PENDING", // ✅ đổi Status → SubStatus
     });
 
     if (!created?.SubscriptionId) {
       throw createError("Không thể tạo Subscription — kiểm tra subscriptionService.createSubscription()", 500);
     }
 
-    // 🧩 2️⃣ Sinh mã giao dịch + link VNPay
-  const txnRef = `SUB_${created.SubcriptionId}_${userId}_${Date.now()}`;
+  // 🧩 2️⃣ Sinh mã giao dịch + link VNPay
+    const txnRef = `SUB_${created.SubscriptionId}_${userId}_${Date.now()}`;
     const orderInfo = `Thanh toán gói Premium #${created.SubscriptionId}`;
     const amount = 299000; // 💰 giá cố định
     const ipAddr = (req.headers["x-forwarded-for"] as string) || req.ip || "127.0.0.1";
@@ -129,28 +125,18 @@ class SubscriptionController {
       orderInfo,
       txnRef,
       ipAddr: ipAddr.replace("::ffff:", ""),
+      
+      returnUrl: process.env.VNP_RETURN_API_URL || "http://localhost:5000/api/vnpay/return",
     });
 
-    // 🧩 3️⃣ Cập nhật lại Subcription sau khi có TxnRef (raw SQL vì service hiện tại không cập nhật các cột này)
-    const pool = await getDbPool();
-    await pool
-      .request()
-      .input("SubcriptionId", Int, created.SubcriptionId)
-      .input("PaymentMethod", NVarChar(50), "VNPAY")
-      .input("TxnRef", NVarChar(200), txnRef)
-      .input("Status", NVarChar(50), "PENDING")
-      .query(`
-        UPDATE [Subcription]
-        SET PaymentMethod = @PaymentMethod, TxnRef = @TxnRef, Status = @Status
-        WHERE SubcriptionId = @SubcriptionId
-      `);
+    // 🧩 3️⃣ (Optional) Persist TxnRef/PaymentMethod — skipped due to current DB schema
 
     // 🧩 4️⃣ Trả kết quả về FE
     res.status(201).json({
       success: true,
       message: "Tạo gói Premium thành công, đang chuyển đến VNPay...",
       data: {
-        SubcriptionId: created.SubcriptionId,
+        SubscriptionId: created.SubscriptionId,
         TxnRef: txnRef,
         vnpUrl,
       },
