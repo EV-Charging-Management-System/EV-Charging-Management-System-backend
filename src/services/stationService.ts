@@ -189,6 +189,20 @@ async getStationInfor(address: string): Promise<any[]> {
     throw new Error("Error fetching ports for point: " + error)
   }
 }
+  async getPortById(portId: number): Promise<any> {
+    const pool = await getDbPool()
+    try {
+      const result = await pool
+        .request()
+        .input("portId", portId)
+        .query(`
+          SELECT * FROM [ChargingPort] WHERE PortId = @portId
+        `)
+      return result.recordset[0]
+    } catch (error) {
+      throw new Error("Error fetching port by ID")
+    }
+  }
 }
 
 export const stationService = new StationService()
