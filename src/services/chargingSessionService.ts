@@ -187,47 +187,64 @@ export class ChargingSessionService {
     }
   }
 
-  // async addPenalty(sessionId: number, penaltyFee: number): Promise<void> {
-  //   const pool = await getDbPool()
-  //   try {
-  //     await pool
-  //       .request()
-  //       .input("SessionId", sessionId)
-  //       .input("PenaltyFee", penaltyFee)
-  //       .query(`
-  //         UPDATE [ChargingSession] SET PenaltyFee = @PenaltyFee WHERE SessionId = @SessionId
-  //       `)
-  //   } catch (error) {
-  //     throw new Error("Error adding penalty")
-  //   }
-  // }
+  async addPenalty(sessionId: number, penaltyFee: number): Promise<void> {
+    const pool = await getDbPool()
+    try {
+      await pool
+        .request()
+        .input("SessionId", sessionId)
+        .input("PenaltyFee", penaltyFee)
+        .query(`
+          UPDATE [ChargingSession] SET PenaltyFee = @PenaltyFee WHERE SessionId = @SessionId
+        `)
+    } catch (error) {
+      throw new Error("Error adding penalty")
+    }
+  }
 
-  // async calculateSessionPrice(sessionId: number, discountPercent = 0): Promise<number> {
-  //   const pool = await getDbPool()
-  //   try {
-  //     const result = await pool
-  //       .request()
-  //       .input("SessionId", sessionId)
-  //       .query(`
-  //         SELECT 
-  //           DATEDIFF(MINUTE, CheckinTime, CheckoutTime) as DurationMinutes,
-  //           PortTypeOfKwh
-  //         FROM [ChargingSession] cs
-  //         JOIN [ChargingPort] cp ON cs.VehicleId = cp.PortId
-  //         WHERE cs.SessionId = @SessionId
-  //       `)
+  async calculateSessionPrice(sessionId: number, discountPercent = 0): Promise<number> {
+    const pool = await getDbPool()
+    try {
+      const sessionRes = await pool
+        .request()
+        .input("SessionId", sessionId)
+        .query(`
+          SELECT SessionId, CheckinTime, CheckoutTime, TotalTime, PortId
+          FROM [ChargingSession]
+          WHERE SessionId = @SessionId
+        `)
 
-  //     if (result.recordset.length === 0) return 0
+      if (sessionRes.recordset.length === 0) return 0
+      const s = sessionRes.recordset[0]
 
-  //     const { DurationMinutes, PortTypeOfKwh } = result.recordset[0]
-  //     const basePrice = (DurationMinutes / 60) * PortTypeOfKwh * 1000
-  //     const discountedPrice = basePrice * (1 - discountPercent / 100)
+      const portRes = await pool
+        .request()
+        .input("PortId", s.PortId)
+        .query(`
+          SELECT PortTypeOfKwh, PortTypePrice
+          FROM [ChargingPort]
+          WHERE PortId = @PortId
+        `)
 
-  //     return discountedPrice
-  //   } catch (error) {
-  //     throw new Error("Error calculating session price")
-  //   }
-  // }
+      if (portRes.recordset.length === 0) return 0
+      const p = portRes.recordset[0]
+
+      let durationMinutes: number
+      if (s.CheckoutTime) {
+        const start = new Date(s.CheckinTime)
+        const end = new Date(s.CheckoutTime)
+        durationMinutes = Math.max(0, Math.ceil((end.getTime() - start.getTime()) / (60 * 1000)))
+      } else {
+        durationMinutes = Number(s.TotalTime) || 0
+      }
+
+      const basePrice = durationMinutes * Number(p.PortTypeOfKwh || 0) * Number(p.PortTypePrice || 0)
+      const discounted = basePrice * (1 - Math.max(0, Math.min(100, discountPercent)) / 100)
+      return Math.max(0, Math.round(discounted))
+    } catch (error) {
+      throw new Error("Error calculating session price")
+    }
+  }
   async generateInvoiceService(sessionId: number, userId: number): Promise<any> {
     const pool = await getDbPool()
     try {
@@ -239,8 +256,9 @@ export class ChargingSessionService {
         .input("SessionId", sessionId)
         .input("CompanyId", company.recordset[0]?.CompanyId || null)
         .input("Amount", session.recordset[0]?.SessionPrice + session.recordset[0]?.PenaltyFee || 0)
-        .input("Status", "Pending")
-        .query(`INSERT INTO [Invoice] (UserId, SessionId, CompanyId, TotalAmount,PaidStatus) VALUES (@UserId, @SessionId, @CompanyId, @Amount,@Status)`)
+        .input("Status", "PENDING")
+        .query(`INSERT INTO [Invoice] (UserId, SessionId, CompanyId, TotalAmount, PaidStatus) VALUES (@UserId, @SessionId, @CompanyId, @Amount, @Status)`)
+      return true
     } catch (error) {
       throw new Error("Error generating invoice")
     }
@@ -294,7 +312,7 @@ export class ChargingSessionService {
       const totaltime = Math.round((Battery - (Battery * batteryPercentage/100))/kwh)
      // Giả sử mỗi phần trăm pin tương ứng với 0.5 giờ sạc
       const result = await pool
-
+        
         .request()
         .input("VehicleId", X.recordset[0]?.VehicleId)
         .input("StationId", stationId)
@@ -316,7 +334,7 @@ export class ChargingSessionService {
       throw new Error("Error starting charging session: " + error)
     }
   }
-
+ 
   async getSessionDetailsGuest(sessionId: number): Promise<any> {
     const pool = await getDbPool()
     try {
