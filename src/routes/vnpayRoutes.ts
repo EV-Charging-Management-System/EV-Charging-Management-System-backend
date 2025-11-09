@@ -15,6 +15,14 @@ router.post(
   vnpayController.createPaymentUrl
 );
 
+// New: create payment link specifically for an invoice
+router.post(
+  "/create-invoice",
+  authenticate,
+  authorize(["ADMIN", "STAFF", "EVDRIVER", "BUSINESS"]),
+  vnpayController.createInvoicePaymentUrl,
+);
+
 /**
  * 🟢 2️⃣ VNPay Return URL
  * (VNPay redirect về URL này sau khi người dùng thanh toán xong)

@@ -18,50 +18,41 @@ class VnpayController {
   // 🟢 1️⃣ Tạo URL thanh toán VNPay
   createPaymentUrl = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
+      // ORIGINAL GENERIC/SUBSCRIPTION FLOW ONLY (no invoiceId here)
+      const { userId: bodyUserId, amount, orderInfo, subscriptionId: rawSubId } = req.body;
+      const userId = (bodyUserId !== undefined && !isNaN(Number(bodyUserId))) ? Number(bodyUserId) : req.user?.userId;
+      const packageIdFromFe = rawSubId !== undefined && !isNaN(Number(rawSubId)) ? Number(rawSubId) : undefined;
 
-  const { userId: bodyUserId, amount, orderInfo, subscriptionId: rawSubId } = req.body;
-        const userId = (bodyUserId !== undefined && !isNaN(Number(bodyUserId))) ? Number(bodyUserId) : req.user?.userId;
-  const packageIdFromFe = rawSubId !== undefined && !isNaN(Number(rawSubId)) ? Number(rawSubId) : undefined;
-
-      // Now subscriptionId is optional — require only userId and amount
-      if (!userId || !amount) {
-        res.status(400).json({
-          success: false,
-          message: "Thiếu thông tin: cần amount và userId.",
-        });
+      if (!userId) {
+        res.status(400).json({ success: false, message: "Thiếu userId" });
         return;
       }
 
-  // Nếu là flow subscription (có packageId) → dùng premium text; ngược lại mặc định là đặt cọc
-  const info = orderInfo || (packageIdFromFe !== undefined ? "Thanh toán gói Premium" : "Đặt cọc");
-
       const pool = await getDbPool();
-
-      // Determine txnRef: if FE provided a `subscriptionId` (treated as PackageId), create a Subscription row and use SUB_ flow; otherwise PAY_
+      let finalAmount: number | undefined = amount !== undefined ? Number(amount) : undefined;
+      let info: string = orderInfo || "Thanh toán";
       let txnRef: string;
+
+      // Flow A: Subscription
       if (packageIdFromFe !== undefined) {
-        // Validate Package exists (optional price check can be added)
         const pkg = await pool
           .request()
           .input("PackageId", Int, packageIdFromFe)
-          .query(`SELECT TOP 1 PackageId FROM [Package] WHERE PackageId = @PackageId`);
-        if (!pkg.recordset[0]) {
+          .query(`SELECT TOP 1 PackageId, PackageName, PackagePrice FROM [Package] WHERE PackageId = @PackageId`);
+        const pkgRecord = pkg.recordset[0];
+        if (!pkgRecord) {
           res.status(400).json({ success: false, message: "Package không tồn tại." });
           return;
         }
+        if (finalAmount === undefined) finalAmount = Number(pkgRecord.PackagePrice || 0);
+        info = orderInfo || `Thanh toán gói Premium: ${pkgRecord.PackageName}`;
 
-        // Fetch CompanyId from user (nullable depending on schema)
         const userRow = await pool
           .request()
           .input("UserId", Int, userId)
-          .query(`
-            SELECT u.CompanyId
-            FROM [User] u
-            WHERE u.UserId = @UserId
-          `);
+          .query(`SELECT u.CompanyId FROM [User] u WHERE u.UserId = @UserId`);
         let companyId: number | null = userRow.recordset[0]?.CompanyId ?? null;
 
-        // Create a PENDING subscription for this Package
         const startDate = new Date();
         const startMonth = `${startDate.getMonth() + 1}/${startDate.getFullYear()}`;
         const durationMonth = "1";
@@ -87,20 +78,24 @@ class VnpayController {
           res.status(500).json({ success: false, message: "Không thể tạo Subscription" });
           return;
         }
-
         txnRef = `SUB_${createdSubId}_${userId}_${Date.now()}`;
-      } else {
-        // No subscriptionId provided → treat as generic payment (no premium activation)
+      }
+      // Flow B: Generic payment
+      else {
+        if (finalAmount === undefined) {
+          res.status(400).json({ success: false, message: "Thiếu amount cho thanh toán thông thường" });
+          return;
+        }
+        info = orderInfo || "Đặt cọc";
         txnRef = `PAY_${userId}_${Date.now()}`;
       }
 
       // 🏦 Tạo URL thanh toán
       const vnpUrl = buildVnpUrl({
-        amount: Number(amount),
+        amount: Number(finalAmount),
         orderInfo: info,
         txnRef,
         ipAddr: getClientIp(req),
-        // Allow override from env to match VNPay dashboard
         returnUrl: process.env.VNP_RETURN_API_URL || "http://localhost:5000/api/vnpay/return",
       });
 
@@ -108,11 +103,66 @@ class VnpayController {
 
       res.status(200).json({
         success: true,
-        data: { url: vnpUrl, vnpUrl, txnRef },
-        // duplicate at top-level for clients reading res.url / res.txnRef
+        data: { url: vnpUrl, vnpUrl, txnRef, amount: finalAmount },
         url: vnpUrl,
         txnRef,
+        amount: finalAmount,
         message: "Tạo URL thanh toán VNPay thành công.",
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // 🆕 1b. Create VNPay URL for a specific invoice
+  createInvoicePaymentUrl = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { userId: bodyUserId, invoiceId: rawInvoiceId, orderInfo } = req.body;
+      const userId = (bodyUserId !== undefined && !isNaN(Number(bodyUserId))) ? Number(bodyUserId) : req.user?.userId;
+      const invoiceId = rawInvoiceId !== undefined && !isNaN(Number(rawInvoiceId)) ? Number(rawInvoiceId) : undefined;
+
+      if (!userId || invoiceId === undefined) {
+        res.status(400).json({ success: false, message: "Thiếu userId hoặc invoiceId" });
+        return;
+      }
+      const pool = await getDbPool();
+      const inv = await pool
+        .request()
+        .input("InvoiceId", Int, invoiceId)
+        .query(`SELECT TOP 1 InvoiceId, UserId, TotalAmount, PaidStatus FROM [Invoice] WHERE InvoiceId = @InvoiceId`);
+      const invRow = inv.recordset[0];
+      if (!invRow) {
+        res.status(404).json({ success: false, message: "Invoice không tồn tại" });
+        return;
+      }
+      if (Number(invRow.UserId) !== Number(userId)) {
+        res.status(403).json({ success: false, message: "Invoice không thuộc user" });
+        return;
+      }
+      if (String(invRow.PaidStatus).toLowerCase() === "paid") {
+        res.status(409).json({ success: false, message: "Invoice đã thanh toán" });
+        return;
+      }
+
+      const amount = Number(invRow.TotalAmount || 0);
+      const info = orderInfo || `Thanh toán hóa đơn #${invoiceId}`;
+      const txnRef = `INV_${invoiceId}_${userId}_${Date.now()}`;
+
+      const vnpUrl = buildVnpUrl({
+        amount,
+        orderInfo: info,
+        txnRef,
+        ipAddr: getClientIp(req),
+        returnUrl: process.env.VNP_RETURN_API_URL || "http://localhost:5000/api/vnpay/return",
+      });
+
+      res.status(200).json({
+        success: true,
+        data: { url: vnpUrl, vnpUrl, txnRef, amount },
+        url: vnpUrl,
+        txnRef,
+        amount,
+        message: "Tạo URL thanh toán VNPay cho invoice thành công.",
       });
     } catch (error) {
       next(error);
@@ -132,7 +182,7 @@ class VnpayController {
     console.log("✅ [VNPay Return] Query:", query);
     console.log("🔐 [VNPay Return] Signature valid:", isValid);
 
-    // On success: only activate subscription when txnRef has SUB_ prefix; ignore PAY_ for premium
+    // On success: activate subscription (SUB_), mark invoice paid (INV_), ignore PAY_ for premium
     try {
       // VNPay Return may not always include vnp_TransactionStatus; success is primarily vnp_ResponseCode === '00'
       if (isValid && responseCode === "00" && txnRef) {
@@ -160,6 +210,25 @@ class VnpayController {
                 INNER JOIN [Subscription] s ON s.UserId = u.UserId
                 WHERE s.SubscriptionId = @SubscriptionId
               `);
+          }
+        } else if (txnRef.startsWith("INV_")) {
+          // Case B: Pay specific invoice
+          const parts = txnRef.split("_");
+          const invoiceIdPart = parts.length >= 3 ? parts[1] : undefined;
+          const invoiceId = invoiceIdPart ? Number(invoiceIdPart) : NaN;
+          if (!isNaN(invoiceId)) {
+            const existing = await pool
+              .request()
+              .input("InvoiceId", Int, invoiceId)
+              .query(`SELECT InvoiceId, PaidStatus FROM [Invoice] WHERE InvoiceId = @InvoiceId`);
+            const invRow = existing.recordset[0];
+            if (invRow && String(invRow.PaidStatus).toLowerCase() !== "paid") {
+              await pool
+                .request()
+                .input("InvoiceId", Int, invoiceId)
+                .query(`UPDATE [Invoice] SET PaidStatus = 'Paid' WHERE InvoiceId = @InvoiceId`);
+              console.log(`✅ [VNPay Return] Invoice ${invoiceId} set to Paid`);
+            }
           }
         } else if (txnRef.startsWith("PAY_")) {
           // Generic payment: no premium upgrade here
@@ -197,13 +266,20 @@ class VnpayController {
 
     console.log("🔁 [VNPay IPN] Received:", query);
 
-    // Parse SubscriptionId from TxnRef pattern: SUB_{subId}_{userId}_{timestamp}
+    // Parse identifiers from TxnRef pattern: SUB_{subId}_{userId}_{ts} | INV_{invoiceId}_{userId}_{ts}
     let subId: number | null = null;
+    let invoiceId: number | null = null;
     if (txnRef && txnRef.startsWith("SUB_")) {
       const parts = txnRef.split("_");
       if (parts.length >= 3) {
         const parsed = Number(parts[1]);
         if (!isNaN(parsed)) subId = parsed;
+      }
+    } else if (txnRef && txnRef.startsWith("INV_")) {
+      const parts = txnRef.split("_");
+      if (parts.length >= 3) {
+        const parsedInv = Number(parts[1]);
+        if (!isNaN(parsedInv)) invoiceId = parsedInv;
       }
     }
 
@@ -227,6 +303,21 @@ class VnpayController {
             WHERE s.SubscriptionId = @SubscriptionId
           `);
         res.status(200).json({ RspCode: "00", Message: "Confirm Success" });
+      } else if (isValid && responseCode === "00" && transactionStatus === "00" && invoiceId) {
+        // Invoice payment
+        const pool = await getDbPool();
+        const inv = await pool
+          .request()
+          .input("InvoiceId", Int, invoiceId)
+          .query(`SELECT InvoiceId, PaidStatus FROM [Invoice] WHERE InvoiceId = @InvoiceId`);
+        if (inv.recordset[0] && String(inv.recordset[0].PaidStatus).toLowerCase() !== "paid") {
+          await pool
+            .request()
+            .input("InvoiceId", Int, invoiceId)
+            .query(`UPDATE [Invoice] SET PaidStatus = 'Paid' WHERE InvoiceId = @InvoiceId`);
+          console.log(`✅ [VNPay IPN] Invoice ${invoiceId} set to Paid`);
+        }
+        res.status(200).json({ RspCode: "00", Message: "Confirm Success" });
       } else if (isValid && (!subId) && txnRef && txnRef.startsWith("PAY_") && responseCode === "00" && transactionStatus === "00") {
         // Generic PAY_ success: acknowledge only, no subscription creation or premium upgrade
         console.log("ℹ️ [VNPay IPN] PAY_ flow success: no subscription activation without subscriptionId.");
@@ -238,6 +329,10 @@ class VnpayController {
           .input("SubscriptionId", Int, subId)
           .query(`UPDATE [Subscription] SET SubStatus = 'FAILED' WHERE SubscriptionId = @SubscriptionId`);
         console.log(`❌ [VNPay IPN] Subscription ${subId} set to FAILED`);
+        res.status(200).json({ RspCode: "00", Message: "Confirm Received" });
+      } else if (isValid && invoiceId) {
+        // Failed invoice payment — keep as is
+        console.log(`❌ [VNPay IPN] Invoice ${invoiceId} payment failed or not confirmed`);
         res.status(200).json({ RspCode: "00", Message: "Confirm Received" });
       } else if (isValid) {
         console.log("⚠️ [VNPay IPN] Valid signature but cannot parse SubscriptionId from txnRef:", txnRef);

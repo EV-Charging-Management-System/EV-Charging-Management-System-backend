@@ -50,6 +50,59 @@ export class VehicleController {
     }
   }
 
+  // Register vehicle by plate; create if not exists; update if exists and belongs to user; conflict if belongs to another user
+  async registerByPlate(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { licensePlate, vehicleName, vehicleType, battery } = req.body
+      const userId = req.user?.userId
+      const role = req.user?.role
+
+      if (!userId) {
+        res.status(401).json({ message: "Unauthorized" })
+        return
+      }
+      if (!licensePlate) {
+        res.status(400).json({ message: "licensePlate is required" })
+        return
+      }
+
+      const result = await vehicleService.registerByPlate({
+        userId,
+        role,
+        licensePlate,
+        vehicleName,
+        vehicleType,
+        battery,
+      })
+
+      if (result.status === "created") {
+        res.status(201).json({
+          message: "Vehicle registered successfully",
+          vehicle: result.vehicle,
+        })
+        return
+      }
+
+      if (result.status === "updated") {
+        res.status(200).json({
+          message: "Vehicle updated successfully",
+          vehicle: result.vehicle,
+        })
+        return
+      }
+
+      if (result.status === "exists-other-user") {
+        res.status(409).json({ message: "Vehicle already exists and owned by another user" })
+        return
+      }
+
+  // no other statuses expected
+  res.status(500).json({ message: "Unexpected response" })
+    } catch (error) {
+      next(error)
+    }
+  }
+
   async updateVehicle(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params
