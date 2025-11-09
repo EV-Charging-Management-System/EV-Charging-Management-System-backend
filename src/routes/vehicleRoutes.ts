@@ -25,4 +25,10 @@ router.get(
 	vehicleController.getCompanyByLicensePlate,
 )
 
+router.get(
+	"/user/:userId",
+	authenticate,
+	authorize(["ADMIN", "STAFF", "EVDRIVER", "BUSINESS"]),
+	vehicleController.getVehiclesByUserId,
+)
 export { router as vehicleRoutes }

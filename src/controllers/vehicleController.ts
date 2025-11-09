@@ -19,6 +19,26 @@ export class VehicleController {
     }
   }
 
+  // Admin/Staff can query any user; EVDRIVER/BUSINESS can only query themselves
+  async getVehiclesByUserId(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { userId } = req.params
+      const requesterId = req.user?.userId
+      const role = req.user?.role
+
+      if (!userId) {
+        res.status(400).json({ message: "Missing userId parameter" })
+        return
+      }
+
+      // All authorized roles (ADMIN, STAFF, EVDRIVER, BUSINESS) are allowed to query vehicles by userId
+      const vehicles = await vehicleService.getVehicles(Number(userId))
+      res.status(200).json({ success: true, data: vehicles })
+    } catch (error) {
+      next(error)
+    }
+  }
+
   async getVehicleById(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params
