@@ -9,8 +9,8 @@ interface CreateBookingParams {
   portId: number
   bookingDate?: string | Date
   startTime?: string | Date
-  qr?: string
   depositAmount: number
+   qr?: string
 }
 
 
