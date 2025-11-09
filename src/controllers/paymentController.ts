@@ -132,14 +132,18 @@ export class PaymentController {
   async payInvoice(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params
-      const { paymentMethod } = req.body
+      // Make paymentMethod optional; default to CASH if none provided (bodyless support)
+      const bodyMethod = (req.body?.paymentMethod ?? req.body?.method) as string | undefined
+      const queryMethod = (req.query?.paymentMethod ?? req.query?.method) as string | undefined
+      const resolvedMethod = String((bodyMethod ?? queryMethod ?? "CASH")).toUpperCase()
 
-      if (!paymentMethod) {
-        res.status(400).json({ message: "Payment method is required" })
+      const allowedMethods = new Set(["CASH", "QR", "MEMBERSHIP", "POSTPAID"])
+      if (!allowedMethods.has(resolvedMethod)) {
+        res.status(400).json({ message: "Invalid payment method", allowed: Array.from(allowedMethods) })
         return
       }
 
-      await paymentService.payInvoice(Number(id), paymentMethod)
+      await paymentService.payInvoice(Number(id), resolvedMethod)
       res.json({ success: true, message: "Invoice paid successfully" })
     } catch (error) {
       next(error)
