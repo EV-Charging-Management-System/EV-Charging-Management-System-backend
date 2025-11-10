@@ -205,11 +205,12 @@ export class VehicleService {
             v.VehicleId,
             v.LicensePlate,
             u.UserId,
-            u.CompanyId,
-            c.CompanyName
+            COALESCE(v.CompanyId, u.CompanyId) AS CompanyId,
+            COALESCE(cv.CompanyName, cu.CompanyName) AS CompanyName
           FROM [Vehicle] v
           JOIN [User] u ON v.UserId = u.UserId
-          LEFT JOIN [Company] c ON u.CompanyId = c.CompanyId
+          LEFT JOIN [Company] cv ON v.CompanyId = cv.CompanyId
+          LEFT JOIN [Company] cu ON u.CompanyId = cu.CompanyId
           WHERE v.LicensePlate = @LicensePlate
         `)
       return result.recordset[0] || null

@@ -38,7 +38,7 @@ export class MembershipService {
         .input("packagePrice", packagePrice)
         .query(`
           INSERT INTO [Package] (PackageName, PackageDescrip, PackagePrice)
-          OUTPUT INSERTED.PackageId
+            OUTPUT INSERTED.PackageId
           VALUES (@packageName, @packageDescrip, @packagePrice)
         `)
       return result.recordset[0]
@@ -77,9 +77,7 @@ export class MembershipService {
       await pool
         .request()
         .input("packageId", packageId)
-        .query(`
-          DELETE FROM [Package] WHERE PackageId = @packageId
-        `)
+        .query(`DELETE FROM [Package] WHERE PackageId = @packageId`)
     } catch (error) {
       throw new Error("Error deleting package")
     }
@@ -100,8 +98,8 @@ export class MembershipService {
         .input("startDate", startDate)
         .input("durationMonth", "1")
         .query(`
-          INSERT INTO [Subcription] (UserId, CompanyId, PackageId, StartMonth, StartDate, DurationMonth)
-          OUTPUT INSERTED.SubcriptionId
+          INSERT INTO [Subscription] (UserId, CompanyId, PackageId, StartMonth, StartDate, DurationMonth)
+            OUTPUT INSERTED.SubscriptionId
           VALUES (@userId, @companyId, @packageId, @startMonth, @startDate, @durationMonth)
         `)
       return result.recordset[0]
@@ -117,13 +115,10 @@ export class MembershipService {
         .request()
         .input("userId", userId)
         .query(`
-          SELECT 
-            s.*,
-            p.PackageName,
-            p.PackagePrice,
-            p.PackageDescrip
-          FROM [Subcription] s
-          LEFT JOIN [Package] p ON s.PackageId = p.PackageId
+          SELECT
+            s.*, p.PackageName, p.PackagePrice, p.PackageDescrip
+          FROM [Subscription] s
+            LEFT JOIN [Package] p ON s.PackageId = p.PackageId
           WHERE s.UserId = @userId
           ORDER BY s.StartDate DESC
         `)
@@ -136,22 +131,31 @@ export class MembershipService {
   async getCompanySubscription(companyId: number): Promise<any> {
     const pool = await getDbPool()
     try {
+      if (!companyId || isNaN(companyId)) {
+        console.warn("[WARN] Invalid or missing companyId:", companyId)
+        return null
+      }
+
       const result = await pool
         .request()
         .input("companyId", companyId)
         .query(`
-          SELECT 
-            s.*,
-            p.PackageName,
-            p.PackagePrice,
-            p.PackageDescrip
-          FROM [Subcription] s
-          LEFT JOIN [Package] p ON s.PackageId = p.PackageId
+          SELECT
+            s.*, p.PackageName, p.PackagePrice, p.PackageDescrip
+          FROM [Subscription] s
+            LEFT JOIN [Package] p ON s.PackageId = p.PackageId
           WHERE s.CompanyId = @companyId
           ORDER BY s.StartDate DESC
         `)
+
+      if (!result.recordset || result.recordset.length === 0) {
+        console.log("[INFO] No subscription found for companyId:", companyId)
+        return null
+      }
+
       return result.recordset[0]
     } catch (error) {
+      console.error("❌ Error fetching company subscription:", error)
       throw new Error("Error fetching company subscription")
     }
   }
@@ -168,9 +172,9 @@ export class MembershipService {
         .input("startDate", startDate)
         .input("startMonth", startMonth)
         .query(`
-          UPDATE [Subcription]
+          UPDATE [Subscription]
           SET StartDate = @startDate, StartMonth = @startMonth
-          WHERE SubcriptionId = @subscriptionId
+          WHERE SubscriptionId = @subscriptionId
         `)
     } catch (error) {
       throw new Error("Error renewing subscription")
@@ -184,7 +188,7 @@ export class MembershipService {
         .request()
         .input("subscriptionId", subscriptionId)
         .query(`
-          DELETE FROM [Subcription] WHERE SubcriptionId = @subscriptionId
+          DELETE FROM [Subscription] WHERE SubscriptionId = @subscriptionId
         `)
     } catch (error) {
       throw new Error("Error canceling subscription")
@@ -199,9 +203,9 @@ export class MembershipService {
         .input("userId", userId)
         .input("companyId", companyId || 0)
         .query(`
-          SELECT COUNT(*) as Count FROM [Subcription]
+          SELECT COUNT(*) as Count FROM [Subscription]
           WHERE (UserId = @userId OR CompanyId = @companyId)
-          AND DATEDIFF(MONTH, StartDate, GETDATE()) < 1
+            AND DATEDIFF(MONTH, StartDate, GETDATE()) < 1
         `)
       return result.recordset[0].Count > 0 ? 20 : 0
     } catch (error) {
