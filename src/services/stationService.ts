@@ -180,7 +180,7 @@ async getStationInfor(address: string): Promise<any[]> {
     const result = await pool.request()
       .input("PointId", pointId)
       .query(`
-        SELECT PortId, PointId, PortType, PortStatus
+        SELECT PortId, PointId, PortType, PortStatus, PortTypeOfKwh, PortTypePrice
         FROM [ChargingPort]
         WHERE PointId = @PointId
       `)
@@ -203,6 +203,47 @@ async getStationInfor(address: string): Promise<any[]> {
       throw new Error("Error fetching port by ID")
     }
   }
+
+async updatePointStatus(pointId: number, status: string): Promise<void> {
+  const validStatuses = ["AVAILABLE", "BUSY", "OFFLINE"]
+  if (!validStatuses.includes(status)) {
+    throw new Error(`Invalid status. Allowed values are: ${validStatuses.join(", ")}`)
+  }
+  const pool = await getDbPool()
+  try {
+    await pool
+      .request()
+      .input("pointId", pointId)
+      .input("status", status)
+      .query(`
+        UPDATE [ChargingPoint]
+        SET ChargingPointStatus = @status
+        WHERE PointId = @pointId
+      `)
+  } catch (error) {
+    throw new Error("Error updating point status: " + error)
+  }
 }
+
+async getLocationById(stationId: number): Promise<string | null> {
+  const pool = await getDbPool()
+  try {
+    const result = await pool
+      .request()
+      .input("stationId", stationId)
+      .query(`
+        SELECT Address FROM [Station] WHERE StationId = @stationId
+      `)
+    if (result.recordset.length > 0) {
+      return result.recordset[0].Address
+    } else {
+      return null
+    }
+  } catch (error) {
+    throw new Error("Error fetching location by stationId: " + error)
+  }
+}
+}
+
 
 export const stationService = new StationService()

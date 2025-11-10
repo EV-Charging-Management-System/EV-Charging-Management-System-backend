@@ -109,7 +109,7 @@ export class StaffService {
         .query(`
           SELECT cs.*, v.LicensePlate, v.VehicleName
           FROM [ChargingSession] cs
-          JOIN [Vehicle] v ON cs.VehicleId = v.VehicleId
+          LEFT JOIN [Vehicle] v ON cs.VehicleId = v.VehicleId
           WHERE cs.StationId = @StationId
           ORDER BY cs.CheckinTime DESC
         `)

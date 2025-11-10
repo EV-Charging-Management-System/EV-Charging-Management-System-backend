@@ -5,7 +5,7 @@ import { staffController } from "../controllers/staffController"
 const router = Router()
 
 router.use(authenticate)
-router.use(authorize(["STAFF"]))
+router.use(authorize(["STAFF", "EVDRIVER"]))
 
 router.get("/vehicle/:licensePlate", staffController.getVehicleByPlate)
 router.post("/session/start", staffController.startDirectSession)

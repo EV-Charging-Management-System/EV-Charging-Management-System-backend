@@ -193,6 +193,38 @@ export class ChargingSessionController {
       next(error)
     }
   }
+  // Staff/Admin can explicitly assign invoice to a provided userId for a session
+  async generateInvoiceByStaff(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const role = req.user?.role
+      if (role !== "STAFF" && role !== "ADMIN") {
+        res.status(403).json({ success: false, message: "Forbidden" })
+        return
+      }
+      const { id } = req.params
+      const { userId } = req.body
+      if (!userId) {
+        res.status(400).json({ success: false, message: "userId is required in body" })
+        return
+      }
+      const sessionId = Number(id)
+      const upsert = await chargingSessionService.upsertInvoiceByStaff(sessionId, Number(userId))
+      res.status(201).json({
+        success: true,
+        message: "Invoice created/updated successfully",
+        data: {
+          invoiceId: upsert.invoiceId,
+          sessionId,
+          userId: Number(userId),
+          totalAmount: upsert.totalAmount,
+          paidStatus: upsert.paidStatus,
+          createdAt: new Date().toISOString(),
+        },
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
   async startSessionByStaff(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { stationId, pointId, portId, licensePlate, batteryPercentage } = req.body
@@ -254,8 +286,37 @@ export class ChargingSessionController {
     } catch (error) {
       next(error)
     }
+  } 
+ async updateBatteryPercentage(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id, batteryPercentage } = req.body;
+
+    if (batteryPercentage === undefined) {
+      res.status(400).json({ success: false, message: "batteryPercentage is required" });
+      return;
+    }
+
+    const updated = await chargingSessionService.updateBatteryPercentage(Number(id), batteryPercentage);
+
+    if (!updated) {
+      res.status(404).json({ success: false, message: "Session not found" });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Battery percentage updated successfully",
+      data: updated,
+    });
+  } catch (error) {
+    console.error("Error in updateBatteryPercentage:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 }
+
+
+}
+
 
 
 export const chargingSessionController = new ChargingSessionController()

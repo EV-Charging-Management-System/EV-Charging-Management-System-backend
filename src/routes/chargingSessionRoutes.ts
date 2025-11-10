@@ -7,6 +7,7 @@ const router = Router()
 router.post("/start", authenticate, authorize(["EVDRIVER","BUSINESS"]), chargingSessionController.startSession)
 router.patch("/:id/end", authenticate, authorize(["EVDRIVER","BUSINESS"]), chargingSessionController.endSession)
 router.post("/:id/invoice", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), chargingSessionController.generateInvoice)
+router.post("/:id/invoice-staff", authenticate, authorize(["STAFF","ADMIN"]), chargingSessionController.generateInvoiceByStaff)
 router.patch("/:id/penalty", authenticate, authorize(["EVDRIVER","STAFF", "ADMIN"]), chargingSessionController.addPenalty)
 router.get("/:id/price", authenticate, chargingSessionController.calculateSessionPrice)
 router.get("/:id", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), chargingSessionController.getSessionDetails)
@@ -17,4 +18,6 @@ router.patch("/staff/:id/end", authenticate, authorize(["EVDRIVER","STAFF", "BUS
 router.post("/guest/start", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), chargingSessionController.startSessionForGuest)
 router.patch("/guest/:id/end", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), chargingSessionController.endSessionForGuest)
 router.get("/:id/guest", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), chargingSessionController.getSessionDetailsGuest)
+//jos
+router.put("/setBatteryPercentage", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS", "ADMIN"]), chargingSessionController.updateBatteryPercentage)
 export { router as chargingSessionRoutes }
