@@ -189,16 +189,16 @@ async getStationInfor(address: string): Promise<any[]> {
     throw new Error("Error fetching ports for point: " + error)
   }
 }
-  async getPortById(portId: number): Promise<any> {
+  async getPortById(poinId: number): Promise<any> {
     const pool = await getDbPool()
     try {
       const result = await pool
         .request()
-        .input("portId", portId)
+        .input("poinId", poinId)
         .query(`
-          SELECT * FROM [ChargingPort] WHERE PortId = @portId
+          SELECT * FROM [ChargingPort] WHERE PointId = @poinId
         `)
-      return result.recordset[0]
+      return result.recordset
     } catch (error) {
       throw new Error("Error fetching port by ID")
     }

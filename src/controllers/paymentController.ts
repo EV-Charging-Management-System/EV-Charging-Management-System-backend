@@ -41,15 +41,15 @@ export class PaymentController {
   async processPayment(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { sessionId, amount, paymentMethod, isPostPaid } = req.body
-      const userId = req.user?.userId
+     
 
-      if (!userId || !sessionId || !amount || !paymentMethod) {
+      if ( !sessionId || !amount || !paymentMethod) {
         res.status(400).json({ message: "Missing required fields" })
         return
       }
 
       const payment = await paymentService.processPayment({
-        userId,
+    
         sessionId,
         amount,
         paymentMethod,

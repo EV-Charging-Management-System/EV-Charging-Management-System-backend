@@ -71,12 +71,12 @@ class StationController {
 })
   async GetPortById(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params
-      if (!id) {
+      const { pointId } = req.params
+      if (!pointId) {
         res.status(400).json({ message: "Missing port ID" })
         return
       }
-      const port = await stationService.getPortById(Number(id))
+      const port = await stationService.getPortById(Number(pointId))
       res.status(200).json({ data: port, message: "Fetched port details successfully" })
     } catch (error) {
       next(error)

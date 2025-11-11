@@ -133,6 +133,41 @@ export class StaffService {
       throw new Error("Error adding penalty")
     }
   }
+  async getAssignedStationAddresses(staffId: number): Promise<any[]> {
+    const pool = await getDbPool()
+    try {
+      const result = await pool
+        .request()
+        .input("StaffId", staffId)
+        .query(`
+          SELECT s.StationId, s.Address, s.StationName,s.StationStatus
+          FROM [User] ssa
+          JOIN [Station] s ON ssa.StationId = s.StationId
+          WHERE ssa.UserId = @StaffId
+        `)
+      return result.recordset
+    } catch (error) {
+      throw new Error("Error fetching assigned station addresses")
+    } 
+  }
+  async getAllStationSessions(staffId?: number): Promise<any[]> {
+    const pool = await getDbPool()
+    try {
+      const user = await pool
+        .request()
+        .input("StaffId", staffId)
+        .query(`
+          SELECT * FROM [User] WHERE UserId = @StaffId
+        `)
+        const session = await pool
+        .request()
+        .input("StationId", user.recordset[0].StationId)
+        .query("SELECT * FROM ChargingSession WHERE StationId = @StationId AND ChargingStatus = 'ONGOING'")
+        return session.recordset
+        } catch (error) {
+      throw new Error("Error fetching user by ID")
+    }
+  }
 }
 
 export const staffService = new StaffService()

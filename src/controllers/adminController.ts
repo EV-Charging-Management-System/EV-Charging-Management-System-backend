@@ -192,15 +192,15 @@ export class AdminController {
   // 👨‍💼 Tạo tài khoản nhân viên mới (Staff)
   async createStaff(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { Email, PasswordHash, FullName } = req.body;
+      const { Email, PasswordHash, FullName, Address } = req.body;
       console.log("📥 Body nhận từ FE:", req.body);
 
-      if (!Email || !PasswordHash || !FullName) {
+      if (!Email || !PasswordHash || !FullName || !Address) {
         res.status(400).json({ success: false, message: "Thiếu thông tin cần thiết!" });
         return;
       }
 
-      const result = await adminService.createStaff(Email, FullName, PasswordHash);
+      const result = await adminService.createStaff(Email, FullName, PasswordHash, Address);
 
       if (!result.success) {
         res.status(400).json({ success: false, message: result.message });

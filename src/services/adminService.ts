@@ -245,7 +245,7 @@ export class AdminService {
   }
 
   // 👨‍💼 Tạo tài khoản Staff mới
-  async createStaff(mail: string, userName: string, password: string): Promise<any> {
+  async createStaff(mail: string, userName: string, password: string, address: string): Promise<any> {
     const pool = await getDbPool();
     try {
       const passwordHash = await bcrypt.hash(password, 10)
@@ -259,19 +259,24 @@ export class AdminService {
       if (check.recordset[0].count > 0) {
         return { success: false, message: "Email đã tồn tại!" };
       }
-
       const hashed = await bcrypt.hash(password, 10);
+      const station = await pool
+        .request()
+        .input("address", address)
+        .query(`SELECT StationId FROM [Station] WHERE Address = @address`);
 
       const insert = await pool
         .request()
         .input("mail", mail)
         .input("userName", userName)
         .input("password", hashed)
+        .input("stationId", station.recordset[0]?.StationId || null)
         .query(`
-          INSERT INTO [User] ([Mail], [UserName], [PassWord], [RoleName])
-          VALUES (@mail, @userName, @password, 'STAFF');
+          INSERT INTO [User] ([Mail], [UserName], [PassWord], [RoleName], [StationId])
+          VALUES (@mail, @userName, @password, 'STAFF', @stationId);
           SELECT SCOPE_IDENTITY() AS UserId;
         `);
+      
 
       const newUserId = insert.recordset[0].UserId;
 

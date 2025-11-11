@@ -68,6 +68,15 @@ export class StaffController {
       next(error)
     }
   }
+  async getSessions(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userID = req.user?.userId;
+      const sessions = await staffService.getAllStationSessions(userID);
+      res.status(200).json({ success: true, data: sessions });
+    } catch (error) {
+      next(error);
+    } 
+  }
 
   async addPenalty(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -83,6 +92,19 @@ export class StaffController {
       res.json({ success: true, message: "Penalty added successfully" })
     } catch (error) {
       next(error)
+    }
+  }
+  async getAssignedStationAddresses(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ message: "Unauthorized" });
+        return;
+      }
+      const addresses = await staffService.getAssignedStationAddresses(userId);
+      res.status(200).json({ success: true, data: addresses });
+    } catch (error) {
+      next(error);
     }
   }
 }

@@ -1,7 +1,7 @@
 import { getDbPool } from "../config/database"
 
 export interface ProcessPaymentParams {
-  userId: number
+
   sessionId: number
   invoiceId?: number
   amount: number
@@ -14,11 +14,12 @@ export class PaymentService {
     const pool = await getDbPool()
     try {
       const paymentTime = new Date()
+      const userId = await pool.request().input("SessionId", params.sessionId).query(`SELECT v.UserId FROM [ChargingSession] cs JOIN [Vehicle] v ON cs.VehicleId = v.VehicleId WHERE cs.SessionId = @SessionId`);
       const paymentStatus = params.isPostPaid ? "Pending" : "Paid"
 
       const result = await pool
         .request()
-        .input("UserId", params.userId)
+        .input("UserId", userId.recordset[0].UserId || null)
         .input("SessionId", params.sessionId)
         .input("InvoiceId", params.invoiceId || null)
         .input("TotalAmount", params.amount)
