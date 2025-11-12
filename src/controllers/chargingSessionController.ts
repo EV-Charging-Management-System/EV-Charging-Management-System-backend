@@ -49,20 +49,24 @@ export class ChargingSessionController {
       const portRes = await pool
         .request()
         .input("PortId", cs.PortId)
-        .query(`SELECT PortTypeOfKwh FROM [ChargingPort] WHERE PortId = @PortId`)
+        .query(`SELECT PortTypeOfKwh, PortTypePrice FROM [ChargingPort] WHERE PortId = @PortId`)
       const port = portRes.recordset[0]
       const start = new Date(cs.CheckinTime)
       const end = new Date(cs.CheckoutTime)
       const durationMinutes = Math.max(0, Math.ceil((end.getTime() - start.getTime()) / (60 * 1000)))
       const energyUsed = Number(durationMinutes) * Number(port?.PortTypeOfKwh || 0)
+      const storedPrice = Number(cs.SessionPrice) || 0
+      const computedPriceFallback = Number(energyUsed) * Number(port?.PortTypePrice || 0)
+      const sessionPrice = storedPrice > 0 ? storedPrice : computedPriceFallback
+      const formattedEnd = new Date(cs.CheckoutTime).toISOString().slice(0,19).replace('T',' ')
       res.json({
         success: true,
         message: "Charging session ended successfully",
         data: {
           sessionId,
           energyUsed,
-          sessionPrice: Number(cs.SessionPrice) || 0,
-          endTime: cs.CheckoutTime,
+          sessionPrice,
+          endTime: formattedEnd,
           status: "COMPLETED",
         },
       })
