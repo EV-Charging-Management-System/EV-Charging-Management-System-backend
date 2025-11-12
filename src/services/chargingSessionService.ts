@@ -3,18 +3,113 @@ import { stationService } from "./stationService"
 
 export class ChargingSessionService {
   async startSessionStaff(stationId: number, pointId: number, portId: number, licensePlate: string, batteryPercentage: number): Promise<any> {
-    // TODO: Implement actual logic
-    return { sessionId: 0, checkinTime: '', chargingStatus: '' };
+    const pool = await getDbPool()
+    try {
+      // Set port to IN_USE
+      await pool
+        .request()
+        .input("Status", "IN_USE")
+        .input("PortId", portId)
+        .query("UPDATE [ChargingPort] SET [PortStatus] = @Status WHERE PortId = @PortId")
+
+      // VN timezone offset (+7h) as used elsewhere in codebase
+      const now = new Date(Date.now() + 7 * 60 * 60 * 1000)
+      const checkinTime = now.toISOString().slice(0, 19).replace('T', ' ')
+      const chargingStatus = "ONGOING"
+
+      // Get vehicle by license plate
+      const vehRes = await pool.request().input("LicensePlate", licensePlate).query("SELECT VehicleId, Battery FROM [Vehicle] WHERE LicensePlate = @LicensePlate")
+      const vehicle = vehRes.recordset[0]
+      if (!vehicle) throw new Error("Vehicle not found")
+
+      // Get port power to compute total time
+      const portRes = await pool.request().input("PortId", portId).query("SELECT PortTypeOfKwh FROM [ChargingPort] WHERE PortId = @PortId")
+      const kwh = Number(portRes.recordset[0]?.PortTypeOfKwh || 0)
+
+      // Compute planned total time (minutes)
+      const battery = Number(vehicle.Battery || 0)
+      const totaltime = Math.max(0, Math.round((battery - (battery * batteryPercentage / 100)) / (kwh || 1)))
+
+      // Insert session
+      const ins = await pool
+        .request()
+        .input("VehicleId", vehicle.VehicleId)
+        .input("StationId", stationId)
+        .input("PointId", pointId)
+        .input("PortId", portId)
+        .input("TotalTime", totaltime)
+        .input("CheckinTime", checkinTime)
+        .input("ChargingStatus", chargingStatus)
+        .input("BatteryPercentage", batteryPercentage)
+        .input("Status", 1)
+        .query(`
+          INSERT INTO [ChargingSession] (StationId, PointId, PortId, CheckinTime, ChargingStatus, TotalTime, BatteryPercentage, Status, VehicleId)
+          OUTPUT INSERTED.SessionId
+          VALUES (@StationId, @PointId, @PortId, @CheckinTime, @ChargingStatus, @TotalTime, @BatteryPercentage, @Status, @VehicleId)
+        `)
+
+      // Update point status to BUSY in Station service
+      await stationService.updatePointStatus(pointId, "BUSY")
+
+      return { sessionId: ins.recordset[0].SessionId, checkinTime, chargingStatus }
+    } catch (error) {
+      throw new Error("Error starting charging session by staff: " + (error instanceof Error ? error.message : String(error)))
+    }
   }
 
   async startSessionForGuest(stationId: number, pointId: number, portId: number, battery: number, batteryPercentage: number): Promise<any> {
-    // TODO: Implement actual logic
-    return { sessionId: 0, checkinTime: '', chargingStatus: '' };
+    const pool = await getDbPool()
+    try {
+      // Set port to IN_USE
+      await pool
+        .request()
+        .input("Status", "IN_USE")
+        .input("PortId", portId)
+        .query("UPDATE [ChargingPort] SET [PortStatus] = @Status WHERE PortId = @PortId")
+
+      const now = new Date(Date.now() + 7 * 60 * 60 * 1000)
+      const checkinTime = now.toISOString().slice(0, 19).replace('T', ' ')
+      const chargingStatus = "ONGOING"
+
+      // Get port power
+      const portRes = await pool.request().input("PortId", portId).query("SELECT PortTypeOfKwh FROM [ChargingPort] WHERE PortId = @PortId")
+      const kwh = Number(portRes.recordset[0]?.PortTypeOfKwh || 0)
+
+      // Compute planned total time (minutes)
+      const totalTimeMinutes = Math.max(0, Math.round((battery - (battery * batteryPercentage / 100)) / (kwh || 1)))
+
+      const ins = await pool
+        .request()
+        .input("StationId", stationId)
+        .input("PointId", pointId)
+        .input("PortId", portId)
+        .input("TotalTime", totalTimeMinutes)
+        .input("CheckinTime", checkinTime)
+        .input("ChargingStatus", chargingStatus)
+        .input("BatteryPercentage", batteryPercentage)
+        .input("Status", 1)
+        .query(`
+          INSERT INTO [ChargingSession] (StationId, PointId, PortId, CheckinTime, ChargingStatus, TotalTime, BatteryPercentage, Status)
+          OUTPUT INSERTED.SessionId
+          VALUES (@StationId, @PointId, @PortId, @CheckinTime, @ChargingStatus, @TotalTime, @BatteryPercentage, @Status)
+        `)
+
+      await stationService.updatePointStatus(pointId, "BUSY")
+
+      return { sessionId: ins.recordset[0].SessionId, checkinTime, chargingStatus }
+    } catch (error) {
+      throw new Error("Error starting charging session for guest: " + (error instanceof Error ? error.message : String(error)))
+    }
   }
 
   async getSessionDetailsGuest(sessionId: number): Promise<any> {
-    // TODO: Implement actual logic
-    return { sessionId, details: {} };
+    const pool = await getDbPool()
+    try {
+      const res = await pool.request().input("SessionId", sessionId).query("SELECT * FROM [ChargingSession] WHERE SessionId = @SessionId")
+      return res.recordset[0]
+    } catch (error) {
+      throw new Error("Error fetching guest session details: " + (error instanceof Error ? error.message : String(error)))
+    }
   }
   async startSession(bookingId: number, vehicleId: number, stationId: number, pointId: number, portId: number, batteryPercentage: number): Promise<any> {
     const pool = await getDbPool()
