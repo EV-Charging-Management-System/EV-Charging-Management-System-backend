@@ -15,8 +15,8 @@ router.get("/my/sessions", authenticate, authorize(["EVDRIVER","STAFF", "BUSINES
 router.get("/company/:companyId", authenticate, authorize(["BUSINESS"]), chargingSessionController.getCompanySessions)
 router.post("/staff/start", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), chargingSessionController.startSessionByStaff)
 router.patch("/staff/:id/end", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), chargingSessionController.endSessionByStaff)
-router.post("/guest/start", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), chargingSessionController.startSessionForGuest)
-router.patch("/guest/:id/end", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), chargingSessionController.endSessionForGuest)
+router.post("/guest/start", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS","ADMIN"]), chargingSessionController.startSessionForGuest)
+router.patch("/guest/:id/end", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS","ADMIN"]), chargingSessionController.endSessionForGuest)
 router.get("/:id/guest", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), chargingSessionController.getSessionDetailsGuest)
 //jos
 router.put("/setBatteryPercentage", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS", "ADMIN"]), chargingSessionController.updateBatteryPercentage)

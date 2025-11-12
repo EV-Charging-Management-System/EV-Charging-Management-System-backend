@@ -349,21 +349,40 @@ export class ChargingSessionController {
       const portRes = await pool
         .request()
         .input("PortId", cs.PortId)
-        .query(`SELECT PortTypeOfKwh FROM [ChargingPort] WHERE PortId = @PortId`)
+        .query(`SELECT PortTypeOfKwh, PortTypePrice FROM [ChargingPort] WHERE PortId = @PortId`)
       const port = portRes.recordset[0]
       const start = new Date(cs.CheckinTime)
       const end = new Date(cs.CheckoutTime)
       const durationMinutes = Math.max(0, Math.ceil((end.getTime() - start.getTime()) / (60 * 1000)))
       const energyUsed = Number(durationMinutes) * Number(port?.PortTypeOfKwh || 0)
-      res.json({
+      const storedPrice = Number(cs.SessionPrice) || 0
+      const computedPriceFallback = Number(energyUsed) * Number(port?.PortTypePrice || 0)
+      const sessionPrice = storedPrice > 0 ? storedPrice : computedPriceFallback
+      if (!storedPrice && sessionPrice > 0) {
+        try {
+          await pool
+            .request()
+            .input("SessionId", sessionId)
+            .input("TotalPrice", sessionPrice)
+            .query(`UPDATE [ChargingSession] SET SessionPrice = @TotalPrice WHERE SessionId = @SessionId`)
+        } catch (e) {
+          console.error("Failed to persist computed session price (guest):", e)
+        }
+      }
+
+      // Create a guest invoice with Pending status and return invoice details
+      const inv = await chargingSessionService.createGuestInvoiceByStaff(sessionId)
+      res.status(201).json({
         success: true,
-        message: "Charging session ended successfully",
+        message: "Invoice generated and stored successfully",
         data: {
+          invoiceId: inv.invoiceId,
           sessionId,
-          energyUsed,
-          sessionPrice: Number(cs.SessionPrice) || 0,
-          endTime: cs.CheckoutTime,
-          status: "COMPLETED",
+          sessionPrice: sessionPrice || 0,
+          penaltyFee: Number(cs.PenaltyFee) || 0,
+          totalAmount: Number(inv.totalAmount || 0) || (sessionPrice + Number(cs.PenaltyFee || 0)) || 0,
+          PaidStatus: "Pending",
+          createdAt: new Date().toISOString(),
         },
       })
     } catch (error) {
