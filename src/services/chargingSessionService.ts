@@ -43,12 +43,22 @@ export class ChargingSessionService {
   async endSession(sessionId: number): Promise<any> {
     const pool = await getDbPool()
     try {
-      
+      // Current time (UTC+7) formatted for SQL DATETIME
       const now = new Date(Date.now() + 7 * 60 * 60 * 1000)
-      const checkoutTime = now.toISOString().slice(0, 19).replace('T', ' ')
+      const checkoutTime = now.toISOString().slice(0, 19).replace("T", " ")
 
-      // Ensure the session belongs to the user via Booking
-      const result = await pool
+      // 1) Load session first to get CheckinTime, TotalTime, PortId, PointId
+      const sessionRes = await pool
+        .request()
+        .input("SessionId", sessionId)
+        .query(`SELECT SessionId, CheckinTime, TotalTime, PortId, PointId FROM [ChargingSession] WHERE SessionId = @SessionId`)
+      if (sessionRes.recordset.length === 0) {
+        throw new Error("Session not found")
+      }
+      const sessionRow = sessionRes.recordset[0]
+
+      // 2) Update checkout and status
+      await pool
         .request()
         .input("SessionId", sessionId)
         .input("CheckoutTime", checkoutTime)
@@ -56,73 +66,66 @@ export class ChargingSessionService {
           UPDATE [ChargingSession]
           SET CheckoutTime = @CheckoutTime, ChargingStatus = 'COMPLETED', Status = 0
           WHERE SessionId = @SessionId
-          SELECT * FROM [ChargingSession] WHERE SessionId = @SessionId
         `)
-        const session = await pool
+
+      // 3) Load port data
+      const portRes = await pool
         .request()
-        .input("SessionId", sessionId)
-        .query(`
-          SELECT * FROM [ChargingSession] WHERE SessionId = @SessionId
-        `);
-        const port  = await pool
-        .request()
-        .input("PortId", result.recordset[0].PortId)
-        .query(`
-          SELECT * FROM [ChargingPort] WHERE PortId = @PortId
-        `);
-        const status = "AVAILABLE"
-      await pool.request().input("status", status).input("portid", port.recordset[0].PortId).query("UPDATE [ChargingPort] SET [PortStatus] = @Status WHERE PortId = @PortId")
-      if (session.recordset.length === 0) {
-        throw new Error("Session not found")
+        .input("PortId", sessionRow.PortId)
+        .query(`SELECT PortTypeOfKwh, PortTypePrice FROM [ChargingPort] WHERE PortId = @PortId`)
+      const portRow = portRes.recordset[0]
+
+      // 4) Compute pricing and penalty safely
+      const checkinDate = new Date(sessionRow.CheckinTime)
+      const checkoutDate = new Date(checkoutTime)
+      const plannedMinutes = Math.max(0, Math.ceil(Number(sessionRow.TotalTime || 0)))
+      const actualMinutes = Math.max(0, Math.ceil((checkoutDate.getTime() - checkinDate.getTime()) / (60 * 1000)))
+
+      const plannedEnd = new Date(checkinDate.getTime() + plannedMinutes * 60 * 1000)
+      const graceEnd = new Date(plannedEnd.getTime() + 10 * 60 * 1000) // 10 minutes grace
+
+      const rateKwh = Number(portRow?.PortTypeOfKwh || 0)
+      const ratePrice = Number(portRow?.PortTypePrice || 0)
+
+      let sessionPrice = 0
+      let penaltyFee = 0
+
+      if (checkoutDate > graceEnd) {
+        // Overtime beyond grace -> penalty, base price is planned minutes
+        const overtimeMs = checkoutDate.getTime() - graceEnd.getTime()
+        const penaltyMinutes = Math.max(0, Math.ceil(overtimeMs / (60 * 1000)))
+        penaltyFee = penaltyMinutes * 3000
+        sessionPrice = plannedMinutes * rateKwh * ratePrice
+      } else if (checkoutDate < plannedEnd) {
+        // Early finish -> pay by actual usage
+        sessionPrice = actualMinutes * rateKwh * ratePrice
+      } else {
+        // On time (within grace) -> planned minutes
+        sessionPrice = plannedMinutes * rateKwh * ratePrice
       }
-            const pointId = session.recordset[0].PointId;
-      const mathTime = new Date(checkoutTime).getTime() - 10 *60 *1000;
-      if (mathTime > new Date(result.recordset[0].CheckinTime + result.recordset[0].TotalTime * 60 * 1000).getTime()) {
-        const Math1 = mathTime - new Date(result.recordset[0].CheckinTime + result.recordset[0].TotalTime * 60 * 1000).getTime();
-        const totalTime = Math.abs(Math1 / (60 * 1000)); // convert milliseconds to minutes
-        const number = Math.ceil(totalTime); // round up to nearest minute
-        const pee =  number * 3000; // assuming rate is 3000 VND per minute
-        await pool
+
+      // 5) Persist price/penalty in one go
+      await pool
         .request()
         .input("SessionId", sessionId)
-        .input("PenaltyFee", pee)
+        .input("PenaltyFee", penaltyFee)
+        .input("TotalPrice", sessionPrice)
         .query(`
-          UPDATE [ChargingSession] SET PenaltyFee = @PenaltyFee WHERE SessionId = @SessionId
-        `);
-        const price2 = result.recordset[0].TotalTime * port.recordset[0].PortTypeOfKwh * port.recordset[0].PortTypePrice;
-        await pool
+          UPDATE [ChargingSession]
+          SET PenaltyFee = @PenaltyFee, SessionPrice = @TotalPrice
+          WHERE SessionId = @SessionId
+        `)
+
+      // 6) Free the port and update point status
+      await pool
         .request()
-        .input("SessionId", sessionId)
-        .input("TotalPrice", price2)
-        .query(`
-          UPDATE [ChargingSession] SET SessionPrice = @TotalPrice WHERE SessionId = @SessionId
-        `);
-      }
-      if (mathTime < new Date(result.recordset[0].CheckinTime + result.recordset[0].TotalTime * 60 * 1000 ).getTime()) {
-        if(result.recordset[0].CheckoutTime < result.recordset[0].CheckinTime + result.recordset[0].TotalTime * 60 * 1000){
-          const x = Math.abs(new Date(result.recordset[0].CheckoutTime).getTime() - new Date(result.recordset[0].CheckinTime).getTime());
-          const totalTime = Math.ceil(x / (60 * 1000)); // convert milliseconds to minutes
-          const price1 = totalTime * port.recordset[0].PortTypeOfKwh * port.recordset[0].PortTypePrice;
-          await pool
-          .request()
-          .input("SessionId", sessionId)
-          .input("TotalPrice", price1)
-          .query(`
-            UPDATE [ChargingSession] SET SessionPrice = @TotalPrice WHERE SessionId = @SessionId
-          `);
-        } 
-      else{
-        const price2 = result.recordset[0].TotalTime * port.recordset[0].PortTypeOfKwh * port.recordset[0].PortTypePrice;
-        await pool
-        .request()
-        .input("SessionId", sessionId)
-        .input("TotalPrice", price2)
-        .query(`
-          UPDATE [ChargingSession] SET SessionPrice = @TotalPrice WHERE SessionId = @SessionId
-        `);
-      }
-    }
-          stationService.updatePointStatus(pointId, "AVAILABLE");
+        .input("PortId", sessionRow.PortId)
+        .input("Status", "AVAILABLE")
+        .query(`UPDATE [ChargingPort] SET [PortStatus] = @Status WHERE PortId = @PortId`)
+
+      // Ensure we await station service update if it's async
+      await stationService.updatePointStatus(sessionRow.PointId, "AVAILABLE")
+
       return { message: "Session ended successfully", checkoutTime }
     } catch (error) {
       throw new Error("Error ending charging session: " + error)
