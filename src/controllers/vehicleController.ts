@@ -196,6 +196,7 @@ export class VehicleController {
           userId: info.UserId,
           companyId: info.CompanyId || null,
           companyName: info.CompanyName || null,
+          battery: info.Battery ?? null,
           subscription,
         },
       })

@@ -204,7 +204,7 @@ export class VehicleService {
           SELECT TOP 1
             v.VehicleId,
             v.LicensePlate,
-            v.Battery,                  
+            v.Battery AS Battery,
           u.UserName,
             u.UserId,
             COALESCE(v.CompanyId, u.CompanyId) AS CompanyId,
