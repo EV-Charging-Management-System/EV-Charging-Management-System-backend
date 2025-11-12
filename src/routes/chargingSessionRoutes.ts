@@ -8,7 +8,7 @@ router.post("/start", authenticate, authorize(["EVDRIVER","BUSINESS"]), charging
 router.patch("/:id/end", authenticate, authorize(["EVDRIVER","BUSINESS"]), chargingSessionController.endSession)
 router.post("/:id/invoice", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), chargingSessionController.generateInvoice)
 router.post("/:id/invoice-staff", authenticate, authorize(["STAFF","ADMIN"]), chargingSessionController.generateInvoiceByStaff)
-router.patch("/:id/penalty", authenticate, authorize(["EVDRIVER","STAFF", "ADMIN"]), chargingSessionController.addPenalty)
+router.patch("/:id/penalty", authenticate, authorize(["EVDRIVER","STAFF", "ADMIN", "BUSINESS"]), chargingSessionController.addPenalty)
 router.get("/:id/price", authenticate, chargingSessionController.calculateSessionPrice)
 router.get("/:id", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), chargingSessionController.getSessionDetails)
 router.get("/my/sessions", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), chargingSessionController.getUserSessions)
