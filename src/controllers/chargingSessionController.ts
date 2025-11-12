@@ -196,33 +196,72 @@ export class ChargingSessionController {
   // Staff/Admin can explicitly assign invoice to a provided userId for a session
   async generateInvoiceByStaff(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const role = req.user?.role
+      const role = req.user?.role;
+      const staffId = req.user?.userId;
       if (role !== "STAFF" && role !== "ADMIN") {
-        res.status(403).json({ success: false, message: "Forbidden" })
-        return
+        res.status(403).json({ success: false, message: "Forbidden" });
+        return;
       }
-      const { id } = req.params
-      const { userId } = req.body
+
+      const { id } = req.params;
+      const { userId } = req.body;
+      const sessionId = Number(id);
+      const pool = await getDbPool();
+
+      let invoiceData: any;
+
+      // If no userId provided => guest session
       if (!userId) {
-        res.status(400).json({ success: false, message: "userId is required in body" })
-        return
+        console.log("💰 Guest session detected — creating CASH invoice");
+
+        invoiceData = await chargingSessionService.createGuestInvoiceByStaff(sessionId);
+
+        // Record immediate CASH payment by staff (using current Payment schema)
+        await pool
+          .request()
+          .input("InvoiceId", invoiceData.invoiceId)
+          .input("SessionId", sessionId)
+          .input("TotalAmount", invoiceData.totalAmount)
+          .input("PaymentTime", new Date())
+          .input("PaymentStatus", "Paid")
+          .input("PaymentType", "CASH")
+          .input("UserId", staffId ?? null)
+          .query(`
+          INSERT INTO [Payment] (UserId, SessionId, InvoiceId, TotalAmount, PaymentTime, PaymentStatus, PaymentType, IsPostPaid, IsDeposit)
+          VALUES (@UserId, @SessionId, @InvoiceId, @TotalAmount, @PaymentTime, @PaymentStatus, @PaymentType, 0, 0)
+        `);
+
+        // Update invoice status to Paid
+        await pool
+          .request()
+          .input("InvoiceId", invoiceData.invoiceId)
+          .input("PaidStatus", "Paid")
+          .query(`UPDATE [Invoice] SET PaidStatus = @PaidStatus WHERE InvoiceId = @InvoiceId`);
+
+        console.log(`✅ Staff (id=${staffId}) paid CASH for guest session #${sessionId}`);
+      } else {
+        // User with account
+        console.log("🧾 Account session detected — creating invoice for user:", userId);
+        invoiceData = await chargingSessionService.upsertInvoiceByStaff(sessionId, Number(userId));
       }
-      const sessionId = Number(id)
-      const upsert = await chargingSessionService.upsertInvoiceByStaff(sessionId, Number(userId))
+
       res.status(201).json({
         success: true,
-        message: "Invoice created/updated successfully",
+        message: !userId
+          ? "Invoice created & paid successfully for guest by staff"
+          : "Invoice created successfully for user by staff",
         data: {
-          invoiceId: upsert.invoiceId,
+          invoiceId: invoiceData.invoiceId,
           sessionId,
-          userId: Number(userId),
-          totalAmount: upsert.totalAmount,
-          paidStatus: upsert.paidStatus,
+          userId: userId || null,
+          totalAmount: invoiceData.totalAmount,
+          paidStatus: !userId ? "Paid" : invoiceData.paidStatus,
           createdAt: new Date().toISOString(),
         },
-      })
+      });
     } catch (error) {
-      next(error)
+      console.error("❌ generateInvoiceByStaff error:", error);
+      next(error);
     }
   }
   async startSessionByStaff(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {

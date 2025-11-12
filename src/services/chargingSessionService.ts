@@ -258,7 +258,7 @@ export class ChargingSessionService {
         .input("SessionId", sessionId)
         .input("CompanyId", company.recordset[0]?.CompanyId || null)
         .input("Amount", session.recordset[0]?.SessionPrice + session.recordset[0]?.PenaltyFee || 0)
-        .input("Status", "PENDING")
+        .input("Status", "Pending")
         .query(`INSERT INTO [Invoice] (UserId, SessionId, CompanyId, TotalAmount, PaidStatus) VALUES (@UserId, @SessionId, @CompanyId, @Amount, @Status)`)
       return true
     } catch (error) {
@@ -301,7 +301,7 @@ export class ChargingSessionService {
           .input("CompanyId", companyId)
           .input("Amount", amount)
           .query(`UPDATE [Invoice] SET UserId = @UserId, CompanyId = @CompanyId, TotalAmount = @Amount WHERE InvoiceId = @InvoiceId`)
-        const paidStatus = existing.recordset[0].PaidStatus || "PENDING"
+        const paidStatus = existing.recordset[0].PaidStatus || "Pending"
         return { invoiceId, totalAmount: amount, paidStatus }
       }
 
@@ -312,12 +312,43 @@ export class ChargingSessionService {
         .input("SessionId", sessionId)
         .input("CompanyId", companyId)
         .input("Amount", amount)
-        .input("Status", "PENDING")
+        .input("Status", "Pending")
         .query(`INSERT INTO [Invoice] (UserId, SessionId, CompanyId, TotalAmount, PaidStatus) OUTPUT INSERTED.InvoiceId VALUES (@UserId, @SessionId, @CompanyId, @Amount, @Status)`)
       const invoiceId = ins.recordset[0].InvoiceId
-      return { invoiceId, totalAmount: amount, paidStatus: "PENDING" }
+      return { invoiceId, totalAmount: amount, paidStatus: "Pending" }
     } catch (error) {
       throw new Error("Error upserting invoice by staff: " + (error instanceof Error ? error.message : String(error)))
+    }
+  }
+
+  // Create invoice for guest session (no user account). Initially UNPAID then staff pays immediately.
+  async createGuestInvoiceByStaff(sessionId: number): Promise<{ invoiceId: number; totalAmount: number; paidStatus: string }> {
+    const pool = await getDbPool()
+    try {
+      const sessionRes = await pool
+        .request()
+        .input("SessionId", sessionId)
+        .query(`SELECT SessionPrice, PenaltyFee FROM [ChargingSession] WHERE SessionId = @SessionId`)
+      const s = sessionRes.recordset[0]
+      if (!s) throw new Error("Session not found")
+      const total = Number(s.SessionPrice || 0) + Number(s.PenaltyFee || 0)
+
+      const invRes = await pool
+        .request()
+        .input("SessionId", sessionId)
+        .input("TotalAmount", total)
+        .input("PaidStatus", "Pending")
+        .input("CreatedAt", new Date())
+        .query(`
+          INSERT INTO [Invoice] (SessionId, TotalAmount, PaidStatus, CreatedAt)
+          OUTPUT INSERTED.InvoiceId
+          VALUES (@SessionId, @TotalAmount, @PaidStatus, @CreatedAt)
+        `)
+
+      const invoiceId = invRes.recordset[0].InvoiceId
+      return { invoiceId, totalAmount: total, paidStatus: "Pending" }
+    } catch (error) {
+      throw new Error("Error creating guest invoice by staff: " + (error instanceof Error ? error.message : String(error)))
     }
   }
 
