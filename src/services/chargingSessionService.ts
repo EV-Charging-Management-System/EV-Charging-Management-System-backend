@@ -255,12 +255,23 @@ export class ChargingSessionService {
     try {
       const company = await pool.request().input("UserId", userId).query(`SELECT CompanyId FROM [User] WHERE UserId = @UserId`)
       const session = await pool.request().input("SessionId", sessionId).query(`SELECT * FROM [ChargingSession] WHERE SessionId = @SessionId`)
+      // Compute base price if not stored yet
+      let baseAmount = Number(session.recordset[0]?.SessionPrice || 0)
+      if (!baseAmount) {
+        try {
+          const computed = await this.calculateSessionPrice(sessionId, 0)
+          baseAmount = Number(computed || 0)
+        } catch {
+          baseAmount = 0
+        }
+      }
+      const totalAmount = baseAmount + Number(session.recordset[0]?.PenaltyFee || 0)
       await pool
         .request()
         .input("UserId", userId)
         .input("SessionId", sessionId)
         .input("CompanyId", company.recordset[0]?.CompanyId || null)
-        .input("Amount", session.recordset[0]?.SessionPrice + session.recordset[0]?.PenaltyFee || 0)
+        .input("Amount", totalAmount)
         .input("Status", "Pending")
         .query(`INSERT INTO [Invoice] (UserId, SessionId, CompanyId, TotalAmount, PaidStatus) VALUES (@UserId, @SessionId, @CompanyId, @Amount, @Status)`)
       return true
@@ -280,7 +291,17 @@ export class ChargingSessionService {
         .query(`SELECT SessionId, SessionPrice, PenaltyFee FROM [ChargingSession] WHERE SessionId = @SessionId`)
       if (sRes.recordset.length === 0) throw new Error("Session not found")
       const session = sRes.recordset[0]
-      const amount = Number(session.SessionPrice || 0) + Number(session.PenaltyFee || 0)
+      // If SessionPrice is not stored yet, compute it on the fly
+      let baseAmount = Number(session.SessionPrice || 0)
+      if (!baseAmount) {
+        try {
+          const computed = await this.calculateSessionPrice(sessionId, 0)
+          baseAmount = Number(computed || 0)
+        } catch {
+          baseAmount = 0
+        }
+      }
+      const amount = baseAmount + Number(session.PenaltyFee || 0)
 
       // Get company of user
       const cRes = await pool

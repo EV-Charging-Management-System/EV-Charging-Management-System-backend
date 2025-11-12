@@ -36,6 +36,7 @@ export class ChargingSessionController {
       await chargingSessionService.endSession(Number(id))
 
       const sessionId = Number(id)
+      const userId = req.user?.userId
       const pool = await getDbPool()
       const sessionRes = await pool
         .request()
@@ -45,6 +46,15 @@ export class ChargingSessionController {
       if (!cs) {
         res.status(404).json({ success: false, message: "Session not found" })
         return
+      }
+      // Auto create/update invoice for this user & session if authenticated user present
+      try {
+        if (userId) {
+          await chargingSessionService.upsertInvoiceByStaff(sessionId, Number(userId))
+        }
+      } catch (invErr) {
+        console.error("Failed to upsert invoice on endSession:", invErr)
+        // Non-critical: continue response
       }
       const portRes = await pool
         .request()
@@ -58,6 +68,18 @@ export class ChargingSessionController {
       const storedPrice = Number(cs.SessionPrice) || 0
       const computedPriceFallback = Number(energyUsed) * Number(port?.PortTypePrice || 0)
       const sessionPrice = storedPrice > 0 ? storedPrice : computedPriceFallback
+      // Persist computed price if not already stored
+      if (!storedPrice && sessionPrice > 0) {
+        try {
+          await pool
+            .request()
+            .input("SessionId", sessionId)
+            .input("TotalPrice", sessionPrice)
+            .query(`UPDATE [ChargingSession] SET SessionPrice = @TotalPrice WHERE SessionId = @SessionId`)
+        } catch (e) {
+          console.error("Failed to persist computed session price:", e)
+        }
+      }
       const formattedEnd = new Date(cs.CheckoutTime).toISOString().slice(0,19).replace('T',' ')
       res.json({
         success: true,
@@ -311,8 +333,39 @@ export class ChargingSessionController {
   async endSessionForGuest(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params
-      const result = await chargingSessionService.endSession(Number(id))
-      res.json({ success: true, data: result })
+      await chargingSessionService.endSession(Number(id))
+
+      const sessionId = Number(id)
+      const pool = await getDbPool()
+      const sessionRes = await pool
+        .request()
+        .input("SessionId", sessionId)
+        .query(`SELECT SessionId, CheckinTime, CheckoutTime, TotalTime, PortId, SessionPrice, PenaltyFee FROM [ChargingSession] WHERE SessionId = @SessionId`)
+      const cs = sessionRes.recordset[0]
+      if (!cs) {
+        res.status(404).json({ success: false, message: "Session not found" })
+        return
+      }
+      const portRes = await pool
+        .request()
+        .input("PortId", cs.PortId)
+        .query(`SELECT PortTypeOfKwh FROM [ChargingPort] WHERE PortId = @PortId`)
+      const port = portRes.recordset[0]
+      const start = new Date(cs.CheckinTime)
+      const end = new Date(cs.CheckoutTime)
+      const durationMinutes = Math.max(0, Math.ceil((end.getTime() - start.getTime()) / (60 * 1000)))
+      const energyUsed = Number(durationMinutes) * Number(port?.PortTypeOfKwh || 0)
+      res.json({
+        success: true,
+        message: "Charging session ended successfully",
+        data: {
+          sessionId,
+          energyUsed,
+          sessionPrice: Number(cs.SessionPrice) || 0,
+          endTime: cs.CheckoutTime,
+          status: "COMPLETED",
+        },
+      })
     } catch (error) {
       next(error)
     }

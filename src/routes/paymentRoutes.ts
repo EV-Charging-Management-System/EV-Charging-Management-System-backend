@@ -9,7 +9,7 @@ router.get("/history", authenticate, authorize(["EVDRIVER", "BUSINESS"]), paymen
 router.get("/invoices", authenticate, authorize(["EVDRIVER", "BUSINESS"]), paymentController.getInvoices)
 router.get("/company/:companyId", authenticate, authorize(["BUSINESS"]), paymentController.getCompanyInvoices)
 router.get("/pending", authenticate, authorize(["EVDRIVER", "BUSINESS"]), paymentController.getPendingPayments)
-router.patch("/:id/pay", authenticate, authorize(["EVDRIVER", "BUSINESS"]), paymentController.payInvoice)
+router.patch("/:id/pay", authenticate, authorize(["EVDRIVER","STAFF", "BUSINESS"]), paymentController.payInvoice)
 router.get("/report", authenticate, authorize(["EVDRIVER", "BUSINESS"]), paymentController.getMonthlyReport)
 router.post("/pay-all", authenticate, authorize(["EVDRIVER", "BUSINESS"]), paymentController.payAll)
 
