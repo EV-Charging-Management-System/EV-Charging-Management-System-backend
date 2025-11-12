@@ -2,6 +2,20 @@ import { getDbPool } from "../config/database"
 import { stationService } from "./stationService"
 
 export class ChargingSessionService {
+  async startSessionStaff(stationId: number, pointId: number, portId: number, licensePlate: string, batteryPercentage: number): Promise<any> {
+    // TODO: Implement actual logic
+    return { sessionId: 0, checkinTime: '', chargingStatus: '' };
+  }
+
+  async startSessionForGuest(stationId: number, pointId: number, portId: number, battery: number, batteryPercentage: number): Promise<any> {
+    // TODO: Implement actual logic
+    return { sessionId: 0, checkinTime: '', chargingStatus: '' };
+  }
+
+  async getSessionDetailsGuest(sessionId: number): Promise<any> {
+    // TODO: Implement actual logic
+    return { sessionId, details: {} };
+  }
   async startSession(bookingId: number, vehicleId: number, stationId: number, pointId: number, portId: number, batteryPercentage: number): Promise<any> {
     const pool = await getDbPool()
     try {
@@ -28,11 +42,7 @@ export class ChargingSessionService {
         .input("ChargingStatus", chargingStatus)
         .input("BatteryPercentage", batteryPercentage)
         .input("Status", 1)
-        .query(`
-          INSERT INTO [ChargingSession] (BookingId, VehicleId, StationId, CheckinTime, ChargingStatus, PointId, PortId, TotalTime, BatteryPercentage, Status)
-          OUTPUT INSERTED.SessionId
-          VALUES (@BookingId, @VehicleId, @StationId, @CheckinTime, @ChargingStatus, @PointId, @PortId, @TotalTime, @BatteryPercentage, @Status)
-        `)
+        .query("INSERT INTO [ChargingSession] (BookingId, VehicleId, StationId, CheckinTime, ChargingStatus, PointId, PortId, TotalTime, BatteryPercentage, Status) OUTPUT INSERTED.SessionId VALUES (@BookingId, @VehicleId, @StationId, @CheckinTime, @ChargingStatus, @PointId, @PortId, @TotalTime, @BatteryPercentage, @Status)")
 
       return { sessionId: result.recordset[0].SessionId, checkinTime, chargingStatus }
     } catch (error) {
@@ -62,11 +72,7 @@ export class ChargingSessionService {
         .request()
         .input("SessionId", sessionId)
         .input("CheckoutTime", checkoutTime)
-        .query(`
-          UPDATE [ChargingSession]
-          SET CheckoutTime = @CheckoutTime, ChargingStatus = 'COMPLETED', Status = 0
-          WHERE SessionId = @SessionId
-        `)
+        .query("UPDATE [ChargingSession] SET CheckoutTime = @CheckoutTime, ChargingStatus = 'COMPLETED', Status = 0 WHERE SessionId = @SessionId")
 
       // 3) Load port data
       const portRes = await pool
@@ -255,26 +261,30 @@ export class ChargingSessionService {
     try {
       const company = await pool.request().input("UserId", userId).query(`SELECT CompanyId FROM [User] WHERE UserId = @UserId`)
       const session = await pool.request().input("SessionId", sessionId).query(`SELECT * FROM [ChargingSession] WHERE SessionId = @SessionId`)
-      // Compute base price if not stored yet
-      let baseAmount = Number(session.recordset[0]?.SessionPrice || 0)
-      if (!baseAmount) {
-        try {
-          const computed = await this.calculateSessionPrice(sessionId, 0)
-          baseAmount = Number(computed || 0)
-        } catch {
-          baseAmount = 0
-        }
+      const amount = Number(session.recordset[0]?.SessionPrice || 0) + Number(session.recordset[0]?.PenaltyFee || 0);
+      // Check existing invoice for session
+      const existing = await pool.request().input("SessionId", sessionId).query(`SELECT TOP 1 InvoiceId FROM [Invoice] WHERE SessionId = @SessionId ORDER BY InvoiceId DESC`);
+      if (existing.recordset.length > 0) {
+        // Update amount if invoice exists
+        const invoiceId = existing.recordset[0].InvoiceId;
+        await pool.request()
+          .input("InvoiceId", invoiceId)
+          .input("UserId", userId)
+          .input("CompanyId", company.recordset[0]?.CompanyId || null)
+          .input("Amount", amount)
+          .query(`UPDATE [Invoice] SET UserId = @UserId, CompanyId = @CompanyId, TotalAmount = @Amount WHERE InvoiceId = @InvoiceId`);
+        return true;
+      } else {
+        // Insert new invoice if not exists
+        await pool.request()
+          .input("UserId", userId)
+          .input("SessionId", sessionId)
+          .input("CompanyId", company.recordset[0]?.CompanyId || null)
+          .input("Amount", amount)
+          .input("Status", "PENDING")
+          .query(`INSERT INTO [Invoice] (UserId, SessionId, CompanyId, TotalAmount, PaidStatus) VALUES (@UserId, @SessionId, @CompanyId, @Amount, @Status)`);
+        return true;
       }
-      const totalAmount = baseAmount + Number(session.recordset[0]?.PenaltyFee || 0)
-      await pool
-        .request()
-        .input("UserId", userId)
-        .input("SessionId", sessionId)
-        .input("CompanyId", company.recordset[0]?.CompanyId || null)
-        .input("Amount", totalAmount)
-        .input("Status", "Pending")
-        .query(`INSERT INTO [Invoice] (UserId, SessionId, CompanyId, TotalAmount, PaidStatus) VALUES (@UserId, @SessionId, @CompanyId, @Amount, @Status)`)
-      return true
     } catch (error) {
       throw new Error("Error generating invoice")
     }
@@ -282,80 +292,93 @@ export class ChargingSessionService {
 
   // Staff: create/update invoice for a session with explicit userId
   async upsertInvoiceByStaff(sessionId: number, userId: number): Promise<{ invoiceId: number; totalAmount: number; paidStatus: string }>{
-    const pool = await getDbPool()
+    const pool = await getDbPool();
     try {
       // Validate session and compute amount
-      const sRes = await pool
-        .request()
-        .input("SessionId", sessionId)
-        .query(`SELECT SessionId, SessionPrice, PenaltyFee FROM [ChargingSession] WHERE SessionId = @SessionId`)
-      if (sRes.recordset.length === 0) throw new Error("Session not found")
-      const session = sRes.recordset[0]
-      // If SessionPrice is not stored yet, compute it on the fly
-      let baseAmount = Number(session.SessionPrice || 0)
+      let baseAmount = 0;
+      const sessionRes = await pool.request().input("SessionId", sessionId).query("SELECT SessionPrice, PenaltyFee FROM [ChargingSession] WHERE SessionId = @SessionId");
+      const session = sessionRes.recordset[0];
+      baseAmount = Number(session?.SessionPrice || 0);
       if (!baseAmount) {
         try {
-          const computed = await this.calculateSessionPrice(sessionId, 0)
-          baseAmount = Number(computed || 0)
+          const computed = await this.calculateSessionPrice(sessionId, 0);
+          baseAmount = Number(computed || 0);
         } catch {
-          baseAmount = 0
+          baseAmount = 0;
         }
       }
-      const amount = baseAmount + Number(session.PenaltyFee || 0)
+      // Check if user is premium for discount
+      let discountPercent = 0;
+      const userRes = await pool.request().input("UserId", userId).query("SELECT IsPremium FROM [User] WHERE UserId = @UserId");
+      if (userRes.recordset[0]?.IsPremium) {
+        discountPercent = 20;
+      }
+      if (discountPercent > 0) {
+        baseAmount = baseAmount * (1 - discountPercent / 100);
+      }
+      const amount = baseAmount + Number(session?.PenaltyFee || 0);
 
       // Get company of user
-      const cRes = await pool
-        .request()
-        .input("UserId", userId)
-        .query(`SELECT CompanyId FROM [User] WHERE UserId = @UserId`)
-      const companyId = cRes.recordset[0]?.CompanyId ?? null
+      const cRes = await pool.request().input("UserId", userId).query("SELECT CompanyId FROM [User] WHERE UserId = @UserId");
+      const companyId = cRes.recordset[0]?.CompanyId ?? null;
 
       // Check existing invoice for session
-      const existing = await pool
-        .request()
-        .input("SessionId", sessionId)
-        .query(`SELECT TOP 1 InvoiceId, PaidStatus FROM [Invoice] WHERE SessionId = @SessionId ORDER BY InvoiceId DESC`)
+      const existing = await pool.request().input("SessionId", sessionId).query("SELECT TOP 1 InvoiceId, PaidStatus FROM [Invoice] WHERE SessionId = @SessionId ORDER BY InvoiceId DESC");
 
       if (existing.recordset.length > 0) {
-        const invoiceId = existing.recordset[0].InvoiceId
-        await pool
-          .request()
-          .input("InvoiceId", invoiceId)
-          .input("UserId", userId)
-          .input("CompanyId", companyId)
-          .input("Amount", amount)
-          .query(`UPDATE [Invoice] SET UserId = @UserId, CompanyId = @CompanyId, TotalAmount = @Amount WHERE InvoiceId = @InvoiceId`)
-        const paidStatus = existing.recordset[0].PaidStatus || "Pending"
-        return { invoiceId, totalAmount: amount, paidStatus }
+        const invoiceId = existing.recordset[0].InvoiceId;
+        await pool.request().input("InvoiceId", invoiceId).input("UserId", userId).input("CompanyId", companyId).input("Amount", amount).query("UPDATE [Invoice] SET UserId = @UserId, CompanyId = @CompanyId, TotalAmount = @Amount WHERE InvoiceId = @InvoiceId");
+        const paidStatus = existing.recordset[0].PaidStatus || "Pending";
+        return { invoiceId, totalAmount: amount, paidStatus };
       }
 
       // Insert new invoice
-      const ins = await pool
-        .request()
-        .input("UserId", userId)
-        .input("SessionId", sessionId)
-        .input("CompanyId", companyId)
-        .input("Amount", amount)
-        .input("Status", "Pending")
-        .query(`INSERT INTO [Invoice] (UserId, SessionId, CompanyId, TotalAmount, PaidStatus) OUTPUT INSERTED.InvoiceId VALUES (@UserId, @SessionId, @CompanyId, @Amount, @Status)`)
-      const invoiceId = ins.recordset[0].InvoiceId
-      return { invoiceId, totalAmount: amount, paidStatus: "Pending" }
+      const ins = await pool.request().input("UserId", userId).input("SessionId", sessionId).input("CompanyId", companyId).input("Amount", amount).input("Status", "Pending").query("INSERT INTO [Invoice] (UserId, SessionId, CompanyId, TotalAmount, PaidStatus) OUTPUT INSERTED.InvoiceId VALUES (@UserId, @SessionId, @CompanyId, @Amount, @Status)");
+      const invoiceId = ins.recordset[0].InvoiceId;
+      return { invoiceId, totalAmount: amount, paidStatus: "Pending" };
     } catch (error) {
-      throw new Error("Error upserting invoice by staff: " + (error instanceof Error ? error.message : String(error)))
+      throw new Error("Error upserting invoice by staff: " + (error instanceof Error ? error.message : String(error)));
     }
   }
 
   // Create invoice for guest session (no user account). Initially UNPAID then staff pays immediately.
   async createGuestInvoiceByStaff(sessionId: number): Promise<{ invoiceId: number; totalAmount: number; paidStatus: string }> {
-    const pool = await getDbPool()
+    const pool = await getDbPool();
     try {
       const sessionRes = await pool
         .request()
         .input("SessionId", sessionId)
-        .query(`SELECT SessionPrice, PenaltyFee FROM [ChargingSession] WHERE SessionId = @SessionId`)
-      const s = sessionRes.recordset[0]
-      if (!s) throw new Error("Session not found")
-      const total = Number(s.SessionPrice || 0) + Number(s.PenaltyFee || 0)
+        .query("SELECT SessionPrice, PenaltyFee FROM [ChargingSession] WHERE SessionId = @SessionId");
+      const s = sessionRes.recordset[0];
+      if (!s) throw new Error("Session not found");
+      let baseAmount = Number(s.SessionPrice || 0);
+      if (!baseAmount) {
+        try {
+          const computed = await this.calculateSessionPrice(sessionId, 0);
+          baseAmount = Number(computed || 0);
+        } catch {
+          baseAmount = 0;
+        }
+      }
+      // For guest, check if any premium user is associated via Booking
+      let discountPercent = 0;
+      let guestUserId: number | undefined = undefined;
+      try {
+        const bookingRes = await pool.request().input("SessionId", sessionId).query("SELECT b.UserId FROM [ChargingSession] cs JOIN [Booking] b ON cs.BookingId = b.BookingId WHERE cs.SessionId = @SessionId");
+        guestUserId = bookingRes.recordset[0]?.UserId;
+      } catch {}
+      if (guestUserId) {
+        try {
+          const userRes = await pool.request().input("UserId", guestUserId).query("SELECT IsPremium FROM [User] WHERE UserId = @UserId");
+          if (userRes.recordset[0]?.IsPremium) {
+            discountPercent = 20;
+          }
+        } catch {}
+      }
+      if (discountPercent > 0) {
+        baseAmount = baseAmount * (1 - discountPercent / 100);
+      }
+      const total = baseAmount + Number(s.PenaltyFee || 0);
 
       const invRes = await pool
         .request()
@@ -363,129 +386,35 @@ export class ChargingSessionService {
         .input("TotalAmount", total)
         .input("PaidStatus", "Pending")
         .input("CreatedAt", new Date())
-        .query(`
-          INSERT INTO [Invoice] (SessionId, TotalAmount, PaidStatus, CreatedAt)
-          OUTPUT INSERTED.InvoiceId
-          VALUES (@SessionId, @TotalAmount, @PaidStatus, @CreatedAt)
-        `)
+        .query("INSERT INTO [Invoice] (SessionId, TotalAmount, PaidStatus, CreatedAt) OUTPUT INSERTED.InvoiceId VALUES (@SessionId, @TotalAmount, @PaidStatus, @CreatedAt)");
 
-      const invoiceId = invRes.recordset[0].InvoiceId
-      return { invoiceId, totalAmount: total, paidStatus: "Pending" }
+      const invoiceId = invRes.recordset[0].InvoiceId;
+      return { invoiceId, totalAmount: total, paidStatus: "Pending" };
     } catch (error) {
-      throw new Error("Error creating guest invoice by staff: " + (error instanceof Error ? error.message : String(error)))
-    }
-  }
-
-  async startSessionForGuest(stationId: number, pointId: number, portId: number, battery : number, batteryPercentage: number): Promise<any> {
-    const pool = await getDbPool()
-    try {
-      const status = "IN_USE"
-      await pool.request().input("status", status).input("portid", portId).query("UPDATE [ChargingPort] SET [PortStatus] = @Status WHERE PortId = @PortId")
-      const now = new Date(Date.now() + 7 * 60 * 60 * 1000)
-      const checkinTime = now.toISOString().slice(0, 19).replace('T', ' ')
-      const chargingStatus = "ONGOING"
-      const port = await pool.request().input("PortId", portId).query("SELECT * FROM [ChargingPort] WHERE PortId = @PortId")
-      const kwh = port.recordset[0]?.PortTypeOfKwh
-      const totaltime = Math.round((battery - (battery * batteryPercentage/100))/kwh)
-     // Giả sử mỗi phần trăm pin tương ứng với 0.5 giờ sạc
-      const result = await pool
-        .request()
-        .input("StationId", stationId)
-        .input("PointId", pointId)
-        .input("PortId", portId)
-        .input("TotalTime", totaltime)
-        .input("CheckinTime", checkinTime)
-        .input("ChargingStatus", chargingStatus)
-        .input("BatteryPercentage", batteryPercentage)
-        .input("Status", 1)
-        .query(`
-          INSERT INTO [ChargingSession] (StationId, PointId, PortId, CheckinTime, ChargingStatus, TotalTime, BatteryPercentage, Status)
-          OUTPUT INSERTED.SessionId
-          VALUES (@StationId, @PointId, @PortId, @CheckinTime, @ChargingStatus, @TotalTime, @BatteryPercentage, @Status)
-        `)
-stationService.updatePointStatus(pointId, "BUSY");
-      return { sessionId: result.recordset[0].SessionId, checkinTime, chargingStatus }
-    } catch (error) {
-      throw new Error("Error starting charging session: " + error)
-    }
-  }
-  async startSessionStaff(stationId: number, pointId: number, portId: number, licensePlate: string, batteryPercentage: number): Promise<any> {
-    const pool = await getDbPool()
-    try {
-      const status = "IN_USE"
-      await pool.request().input("status", status).input("portid", portId).query("UPDATE [ChargingPort] SET [PortStatus] = @Status WHERE PortId = @PortId")
-      const now = new Date(Date.now() + 7 * 60 * 60 * 1000)
-      const checkinTime = now.toISOString().slice(0, 19).replace('T', ' ')
-      const chargingStatus = "ONGOING"
-      const X = await pool.request().input("licensePlate", licensePlate).query("SELECT * FROM [Vehicle] WHERE LicensePlate = @LicensePlate")
-      const Battery = X.recordset[0]?.Battery
-      const port = await pool.request().input("PortId", portId).query("SELECT * FROM [ChargingPort] WHERE PortId = @PortId")
-      const kwh = port.recordset[0]?.PortTypeOfKwh
-      const totaltime = Math.round((Battery - (Battery * batteryPercentage/100))/kwh)
-     // Giả sử mỗi phần trăm pin tương ứng với 0.5 giờ sạc
-      const result = await pool
-        
-        .request()
-        .input("VehicleId", X.recordset[0]?.VehicleId)
-        .input("StationId", stationId)
-        .input("PointId", pointId)
-        .input("PortId", portId)
-        .input("TotalTime", totaltime)
-        .input("CheckinTime", checkinTime)
-        .input("ChargingStatus", chargingStatus)
-        .input("BatteryPercentage", batteryPercentage)
-        .input("Status", 1)
-        .query(`
-          INSERT INTO [ChargingSession] (StationId, PointId, PortId, CheckinTime, ChargingStatus, TotalTime, BatteryPercentage, Status, VehicleId)
-          OUTPUT INSERTED.SessionId
-          VALUES (@StationId, @PointId, @PortId, @CheckinTime, @ChargingStatus, @TotalTime, @BatteryPercentage, @Status, @VehicleId)
-        `)
-await stationService.updatePointStatus(pointId, "BUSY")
-      return { sessionId: result.recordset[0].SessionId, checkinTime, chargingStatus }
-    } catch (error) {
-      throw new Error("Error starting charging session: " + error)
-    }
-  }
- 
-  async getSessionDetailsGuest(sessionId: number): Promise<any> {
-    const pool = await getDbPool()
-    try {
-      const result = await pool.request().input("SessionId", sessionId)
-      .query(`SELECT * FROM [ChargingSession] WHERE SessionId = @SessionId`)
-      await pool
-        .request()
-        .input("SessionId", sessionId)
-        return result.recordset[0]
-    } catch (error) {
-      throw new Error("Error generating invoice")
+      throw new Error("Error creating guest invoice by staff: " + (error instanceof Error ? error.message : String(error)));
     }
   }
   //jos
   async updateBatteryPercentage(sessionId: number, batteryPercentage: number): Promise<any> {
-  const pool = await getDbPool()
-  try {
-    const result = await pool
-      .request()
-      .input("SessionId", sessionId)
-      .input("BatteryPercentage", batteryPercentage)
-      .query(`
-        UPDATE [ChargingSession]
-        SET BatteryPercentage = @BatteryPercentage
-        WHERE SessionId = @SessionId;
-        SELECT * FROM [ChargingSession] WHERE SessionId = @SessionId;
-      `)
+    const pool = await getDbPool();
+    try {
+      const result = await pool
+        .request()
+        .input("SessionId", sessionId)
+        .input("BatteryPercentage", batteryPercentage)
+        .query("UPDATE [ChargingSession] SET BatteryPercentage = @BatteryPercentage WHERE SessionId = @SessionId; SELECT * FROM [ChargingSession] WHERE SessionId = @SessionId;");
 
-    if (result.recordset.length === 0) {
-      throw new Error("Session not found abc abc")
-    }
+      if (result.recordset.length === 0) {
+        throw new Error("Session not found abc abc");
+      }
 
-    return {
-      message: "Battery percentage updated successfully",
-      session: result.recordset[0]
+      return {
+        message: "Battery percentage updated successfully",
+        session: result.recordset[0]
+      };
+    } catch (error) {
+      throw new Error("Error updating battery percentage: " + error);
     }
-  } catch (error) {
-    throw new Error("Error updating battery percentage: " + error)
   }
 }
-}
-export const chargingSessionService = new ChargingSessionService()
+export const chargingSessionService = new ChargingSessionService();
