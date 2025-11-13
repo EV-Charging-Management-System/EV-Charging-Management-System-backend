@@ -1,6 +1,7 @@
-import { Int, NVarChar } from 'mssql'
+import { Int, NVarChar, Bit } from 'mssql'
 import { getDbPool } from '../config/database'
 import bcrypt from 'bcrypt'
+import { validateEmail } from '../utils/validation'
 
 class UserService {
   async getAllUsers(): Promise<any[]> {
@@ -16,42 +17,110 @@ class UserService {
   async getUserById(id: number): Promise<any | null> {
     const pool = await getDbPool()
     try {
-      const result = await pool.request().input('UserId', Int, id).query(`SELECT UserId, CompanyId, UserName, Mail, RoleName FROM [User] WHERE UserId = @UserId`)
+      const result = await pool
+        .request()
+        .input('UserId', Int, id)
+        .query(
+          `SELECT UserId, CompanyId, StationId, IsPremium, UserName, Mail, RoleName FROM [User] WHERE UserId = @UserId`
+        )
       return result.recordset[0] || null
     } catch (error) {
       throw new Error('Error fetching user: ' + error)
     }
   }
 
-  async updateUser(id: number, data: { CompanyId?: number; UserName?: string; Mail?: string; PassWord?: string; RoleName?: string }): Promise<any> {
+  async updateUser(
+    id: number,
+    data: {
+      CompanyId?: number | null
+      StationId?: number | null
+      IsPremium?: boolean
+      UserName?: string
+      Mail?: string
+      PassWord?: string
+      RoleName?: string
+    }
+  ): Promise<any> {
     const pool = await getDbPool()
     try {
-      const existing = await this.getUserById(id)
+      // Fetch full existing row (including password hash) for safe defaults
+      const existingRs = await pool
+        .request()
+        .input('UserId', Int, id)
+        .query(
+          `SELECT UserId, CompanyId, StationId, IsPremium, UserName, Mail, PassWord, RoleName FROM [User] WHERE UserId = @UserId`
+        )
+      const existing = existingRs.recordset[0]
       if (!existing) return null
 
-      const CompanyId = data.CompanyId ?? existing.CompanyId
+      const allowedRoles = ['ADMIN', 'STAFF', 'EVDRIVER', 'BUSINESS']
+
+      const CompanyId = data.CompanyId !== undefined ? data.CompanyId : existing.CompanyId
+      const StationId = data.StationId !== undefined ? data.StationId : existing.StationId
+      const IsPremium = data.IsPremium !== undefined ? data.IsPremium : existing.IsPremium
       const UserName = data.UserName ?? existing.UserName
       const Mail = data.Mail ?? existing.Mail
       const RoleName = data.RoleName ?? existing.RoleName
 
-      let passwordToStore = existing.PassWord ?? null
+      // Validate email format and uniqueness if changed
+      if (data.Mail) {
+        if (!validateEmail(data.Mail)) throw new Error('Invalid email format')
+        const dup = await pool
+          .request()
+          .input('Mail', NVarChar(100), data.Mail)
+          .input('UserId', Int, id)
+          .query(`SELECT COUNT(*) AS C FROM [User] WHERE Mail = @Mail AND UserId <> @UserId`)
+        if (dup.recordset[0]?.C > 0) throw new Error('Email already in use')
+      }
+
+      // Validate role if provided
+      if (data.RoleName && !allowedRoles.includes(data.RoleName)) {
+        throw new Error(`Invalid RoleName. Allowed: ${allowedRoles.join(', ')}`)
+      }
+
+      // Validate foreign keys if provided
+      if (data.CompanyId !== undefined && data.CompanyId !== null) {
+        const ck = await pool
+          .request()
+          .input('CompanyId', Int, data.CompanyId)
+          .query(`SELECT COUNT(*) AS C FROM [Company] WHERE CompanyId = @CompanyId`)
+        if (ck.recordset[0]?.C === 0) throw new Error('CompanyId does not exist')
+      }
+      if (data.StationId !== undefined && data.StationId !== null) {
+        const ck = await pool
+          .request()
+          .input('StationId', Int, data.StationId)
+          .query(`SELECT COUNT(*) AS C FROM [Station] WHERE StationId = @StationId`)
+        if (ck.recordset[0]?.C === 0) throw new Error('StationId does not exist')
+      }
+
+      // Password hashing if provided
+      let passwordToStore: string | null = existing.PassWord
       if (data.PassWord) {
-        // Hash new password
         passwordToStore = await bcrypt.hash(data.PassWord, 10)
       }
 
-      const request = pool.request().input('UserId', Int, id).input('CompanyId', Int, CompanyId).input('UserName', NVarChar(100), UserName).input('Mail', NVarChar(100), Mail).input('RoleName', NVarChar(50), RoleName)
-
-      if (passwordToStore) {
-        request.input('PassWord', NVarChar(100), passwordToStore)
-      } else {
-        request.input('PassWord', NVarChar(100), null)
-      }
+      const request = pool
+        .request()
+        .input('UserId', Int, id)
+  .input('CompanyId', Int, CompanyId as any)
+  .input('StationId', Int, StationId as any)
+        .input('IsPremium', Bit, IsPremium)
+        .input('UserName', NVarChar(100), UserName)
+        .input('Mail', NVarChar(100), Mail)
+        .input('RoleName', NVarChar(50), RoleName)
+        .input('PassWord', NVarChar(100), passwordToStore)
 
       const result = await request.query(`
         UPDATE [User]
-        SET CompanyId = @CompanyId, UserName = @UserName, Mail = @Mail, PassWord = @PassWord, RoleName = @RoleName
-        OUTPUT INSERTED.UserId, INSERTED.CompanyId, INSERTED.UserName, INSERTED.Mail, INSERTED.RoleName
+        SET CompanyId = @CompanyId,
+            StationId = @StationId,
+            IsPremium = @IsPremium,
+            UserName = @UserName,
+            Mail = @Mail,
+            PassWord = @PassWord,
+            RoleName = @RoleName
+        OUTPUT INSERTED.UserId, INSERTED.CompanyId, INSERTED.StationId, INSERTED.IsPremium, INSERTED.UserName, INSERTED.Mail, INSERTED.RoleName
         WHERE UserId = @UserId
       `)
 
@@ -65,7 +134,10 @@ class UserService {
     const pool = await getDbPool()
     try {
       // Prevent deleting users who have subscriptions to preserve history
-      const subs = await pool.request().input('UserId', Int, id).query('SELECT COUNT(*) AS Count FROM Subcription WHERE UserId = @UserId')
+      const subs = await pool
+        .request()
+        .input('UserId', Int, id)
+        .query('SELECT COUNT(*) AS Count FROM Subscription WHERE UserId = @UserId')
 
       if (subs.recordset && subs.recordset[0] && subs.recordset[0].Count > 0) {
         throw new Error('Cannot delete user with active subscriptions.')
@@ -81,11 +153,15 @@ class UserService {
   async approveUser(id: number): Promise<any> {
     const pool = await getDbPool()
     try {
-      // Set RoleName to 'BUSSINESS' (as defined in DB CHECK constraint)
-      const result = await pool.request().input('UserId', Int, id).input('RoleName', NVarChar(50), 'BUSSINESS').query(`
+      // Set RoleName to 'BUSINESS' (as defined in DB CHECK constraint)
+      const result = await pool
+        .request()
+        .input('UserId', Int, id)
+        .input('RoleName', NVarChar(50), 'BUSINESS')
+        .query(`
         UPDATE [User]
         SET RoleName = @RoleName
-        OUTPUT INSERTED.UserId, INSERTED.CompanyId, INSERTED.UserName, INSERTED.Mail, INSERTED.RoleName
+        OUTPUT INSERTED.UserId, INSERTED.CompanyId, INSERTED.StationId, INSERTED.IsPremium, INSERTED.UserName, INSERTED.Mail, INSERTED.RoleName
         WHERE UserId = @UserId
       `)
 

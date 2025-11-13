@@ -1,5 +1,7 @@
 import { getDbPool } from "../config/database";
 import bcrypt from "bcryptjs";
+import sql from "mssql";
+import { validateEmail } from "../utils/validation";
 
 export class AdminService {
   // 🏢 Lấy danh sách doanh nghiệp chờ duyệt
@@ -477,6 +479,146 @@ export class AdminService {
         `)
     } catch (error) {
       throw new Error("Error deleting charging port: " + error)
+    }
+  }
+
+  // 🛠️ Admin cập nhật hồ sơ bản thân
+  async updateAdminProfile(
+    userId: number,
+    data: { UserName?: string; Mail?: string; PassWord?: string }
+  ): Promise<any> {
+    const pool = await getDbPool()
+    try {
+      // Lấy hiện trạng
+      const existing = await pool
+        .request()
+        .input("UserId", userId)
+        .query(`SELECT UserId, UserName, Mail, PassWord, RoleName FROM [User] WHERE UserId = @UserId`)
+
+      if (!existing.recordset[0]) {
+        throw new Error("User not found")
+      }
+
+      const current = existing.recordset[0]
+      const nextUserName = data.UserName ?? current.UserName
+      const nextMail = data.Mail ?? current.Mail
+
+      if (data.Mail) {
+        if (!validateEmail(data.Mail)) {
+          throw new Error("Invalid email format")
+        }
+        // Check unique email for other users
+        const dup = await pool
+          .request()
+          .input("Mail", data.Mail)
+          .input("UserId", userId)
+          .query(`SELECT COUNT(*) AS C FROM [User] WHERE Mail = @Mail AND UserId <> @UserId`)
+        if (dup.recordset[0]?.C > 0) {
+          throw new Error("Email already in use")
+        }
+      }
+
+      let nextPasswordHash = current.PassWord
+      if (data.PassWord) {
+        nextPasswordHash = await bcrypt.hash(data.PassWord, 10)
+      }
+
+      const result = await pool
+        .request()
+        .input("UserId", userId)
+        .input("UserName", nextUserName)
+        .input("Mail", nextMail)
+        .input("PassWord", nextPasswordHash)
+        .query(`
+          UPDATE [User]
+          SET UserName = @UserName,
+              Mail = @Mail,
+              PassWord = @PassWord
+          OUTPUT INSERTED.UserId, INSERTED.UserName, INSERTED.Mail, INSERTED.RoleName
+          WHERE UserId = @UserId
+        `)
+
+      return result.recordset[0]
+    } catch (error) {
+      throw new Error("Error updating profile: " + error)
+    }
+  }
+
+  // 🗑️ Xóa người dùng và toàn bộ dữ liệu phụ thuộc (transactional)
+  async deleteUserCascading(targetUserId: number): Promise<void> {
+    const pool = await getDbPool()
+    const tx = new sql.Transaction(pool)
+    try {
+      // Kiểm tra user tồn tại và không phải ADMIN
+      const userRs = await pool
+        .request()
+        .input("UserId", targetUserId)
+        .query(`SELECT UserId, RoleName FROM [User] WHERE UserId = @UserId`)
+
+      const userRow = userRs.recordset[0]
+      if (!userRow) {
+        throw new Error("User not found")
+      }
+      if (String(userRow.RoleName).toUpperCase() === "ADMIN") {
+        throw new Error("Cannot delete an ADMIN user")
+      }
+
+      await tx.begin()
+      const req = new sql.Request(tx)
+      req.input("UserId", targetUserId)
+
+      // 1) Refresh tokens
+      await req.query(`DELETE FROM [RefreshToken] WHERE UserId = @UserId`)
+
+      // 2) Payments directly by user
+      await req.query(`DELETE FROM [Payment] WHERE UserId = @UserId`)
+
+      // 3) Payments via user's invoices
+      await req.query(`
+        DELETE P
+        FROM [Payment] P
+        WHERE P.InvoiceId IN (SELECT InvoiceId FROM [Invoice] WHERE UserId = @UserId)
+      `)
+
+      // 4) Payments via user's sessions (by vehicle or booking)
+      await req.query(`
+        DELETE P
+        FROM [Payment] P
+        WHERE P.SessionId IN (
+          SELECT cs.SessionId
+          FROM [ChargingSession] cs
+          WHERE cs.VehicleId IN (SELECT VehicleId FROM [Vehicle] WHERE UserId = @UserId)
+             OR cs.BookingId IN (SELECT BookingId FROM [Booking] WHERE UserId = @UserId)
+        )
+      `)
+
+      // 5) Invoices of user
+      await req.query(`DELETE FROM [Invoice] WHERE UserId = @UserId`)
+
+      // 6) Charging sessions of user's vehicles or bookings
+      await req.query(`
+        DELETE cs
+        FROM [ChargingSession] cs
+        WHERE cs.VehicleId IN (SELECT VehicleId FROM [Vehicle] WHERE UserId = @UserId)
+           OR cs.BookingId IN (SELECT BookingId FROM [Booking] WHERE UserId = @UserId)
+      `)
+
+      // 7) Bookings of user
+      await req.query(`DELETE FROM [Booking] WHERE UserId = @UserId`)
+
+      // 8) Subscriptions of user
+      await req.query(`DELETE FROM [Subscription] WHERE UserId = @UserId`)
+
+      // 9) Vehicles of user
+      await req.query(`DELETE FROM [Vehicle] WHERE UserId = @UserId`)
+
+      // 10) Finally, the user
+      await req.query(`DELETE FROM [User] WHERE UserId = @UserId`)
+
+      await tx.commit()
+    } catch (error) {
+      try { await tx.rollback() } catch {}
+      throw new Error("Error deleting user: " + error)
     }
   }
 }

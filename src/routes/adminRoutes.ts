@@ -36,4 +36,9 @@ router.delete('/deletePoint',adminController.deletePointById)
 router.post('/createPort',adminController.createPort)
 router.put('/updatePort',adminController.updatePort)
 router.delete('/deletePort',adminController.deletePortById)
+
+// 👤 Admin profile & user management
+router.put('/profile', adminController.updateProfile)
+router.put('/update-user', adminController.updateAnyUser)
+router.delete('/delete-users/:id', adminController.deleteUser)
 export { router as adminRoutes };

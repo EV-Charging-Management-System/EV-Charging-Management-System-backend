@@ -2,6 +2,7 @@ import type { AuthRequest } from "../middlewares/authMiddleware";
 import type { NextFunction, Response } from "express";
 import { adminService } from "../services/adminService";
 import { getDbPool } from "../config/database";
+import { userService } from "../services/userService";
 
 export class AdminController {
   // 📊 Dashboard thống kê
@@ -326,6 +327,87 @@ export class AdminController {
       }
       await adminService.deletePortById(portId)
       res.json({ success: true, message: "Port deleted successfully" })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  // 🛠️ Admin cập nhật hồ sơ của chính mình
+  async updateProfile(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const authUser = req.user
+      if (!authUser) {
+        res.status(401).json({ message: "Unauthorized" })
+        return
+      }
+
+      const { UserName, Mail, PassWord } = req.body || {}
+      if (!UserName && !Mail && !PassWord) {
+        res.status(400).json({ message: "At least one field (UserName, Mail, PassWord) is required" })
+        return
+      }
+
+      const updated = await adminService.updateAdminProfile(authUser.userId, { UserName, Mail, PassWord })
+      res.status(200).json({ success: true, data: updated, message: "Profile updated successfully" })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  // 🗑️ Admin xóa người dùng theo ID (không cho phép xóa ADMIN khác)
+  async deleteUser(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const idFromParams = (req.params as any)?.id
+      const idFromBody = (req.body as any)?.userId
+      const userId = Number(idFromParams ?? idFromBody)
+      if (Number.isNaN(userId)) {
+        res.status(400).json({ message: "Invalid user id" })
+        return
+      }
+
+      const requester = req.user
+      if (!requester || requester.role !== 'ADMIN') {
+        res.status(403).json({ message: "Forbidden" })
+        return
+      }
+
+      await adminService.deleteUserCascading(userId)
+      res.status(200).json({ success: true, message: "User deleted successfully" })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  // ✏️ Admin cập nhật mọi thông tin của người dùng bất kỳ
+  async updateAnyUser(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const idFromParams = (req.params as any)?.id
+      const idFromBody = (req.body as any)?.userId
+      const targetUserId = Number(idFromParams ?? idFromBody)
+      if (Number.isNaN(targetUserId)) {
+        res.status(400).json({ message: 'Invalid user id' })
+        return
+      }
+
+      const requester = req.user
+      if (!requester || requester.role !== 'ADMIN') {
+        res.status(403).json({ message: 'Forbidden' })
+        return
+      }
+
+      const payload = req.body || {}
+      if (!payload || Object.keys(payload).length === 0) {
+        res.status(400).json({ message: 'No fields provided to update' })
+        return
+      }
+
+      const updated = await userService.updateUser(targetUserId, payload)
+      if (!updated) {
+        res.status(404).json({ message: 'User not found' })
+        return
+      }
+
+      res.status(200).json({ success: true, data: updated, message: 'User updated successfully' })
     } catch (error) {
       next(error)
     }
