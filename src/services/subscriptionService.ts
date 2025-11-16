@@ -1,4 +1,4 @@
-import { Int, NVarChar, Date as SqlDate } from "mssql";
+import { Int, NVarChar, Date as SqlDate, Float as SqlFloat } from "mssql";
 import { getDbPool } from "../config/database";
 import { buildVnpUrl } from "../utils/vnpay"; 
 
@@ -66,6 +66,22 @@ class SubscriptionService {
         finalCompanyId = row?.CompanyId ?? null;
       }
 
+      // Fetch package info to derive price and default duration
+      const pkgRes = await pool
+        .request()
+        .input("PackageId", Int, PackageId)
+        .query(`SELECT PackagePrice, DurationMonths FROM [Package] WHERE PackageId = @PackageId`);
+      const pkg = pkgRes.recordset[0];
+      if (!pkg) {
+        throw new Error("Package not found");
+      }
+      const packagePrice = Number(pkg.PackagePrice || 0);
+      const defaultDurationMonths = pkg.DurationMonths != null ? String(pkg.DurationMonths) : null;
+
+      const finalDurationMonth: string = String(
+        (DurationMonth != null && DurationMonth !== "") ? DurationMonth : (defaultDurationMonths ?? "1")
+      );
+
       // 1️⃣ Thêm mới bản ghi Subscription
       const insertResult = await pool
         .request()
@@ -74,7 +90,7 @@ class SubscriptionService {
         .input("PackageId", Int, PackageId)
         .input("StartMonth", NVarChar(100), StartMonth ?? "") 
         .input("StartDate", SqlDate, StartDate)
-        .input("DurationMonth", NVarChar(100), DurationMonth ?? "") 
+        .input("DurationMonth", NVarChar(100), finalDurationMonth) 
         .input("SubStatus", NVarChar(20), "PENDING")
         .query(`
           INSERT INTO [Subscription]
@@ -91,7 +107,7 @@ class SubscriptionService {
 
       // 3️⃣ Sinh URL thanh toán VNPay
       const vnpUrl = buildVnpUrl({
-        amount: 299000,
+        amount: Math.max(0, Math.floor(packagePrice)),
         orderInfo,
         txnRef,
         ipAddr: IpAddr,

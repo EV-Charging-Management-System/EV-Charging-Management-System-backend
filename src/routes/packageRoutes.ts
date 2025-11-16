@@ -9,8 +9,8 @@ router.get('/', authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER'])
 router.get('/:id', authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER']), packageController.getById)
 
 // Create/update/delete restricted to ADMIN or STAFF
-router.post('/', authenticate, authorize(['ADMIN','STAFF']), packageController.create)
-router.put('/:id', authenticate, authorize(['ADMIN','STAFF']), packageController.update)
-router.delete('/:id', authenticate, authorize(['ADMIN']), packageController.delete)
+router.post('/', authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER']), packageController.create)
+router.put('/:id', authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER']), packageController.update)
+router.delete('/:id', authenticate, authorize(['ADMIN','BUSINESS','STAFF','EVDRIVER']), packageController.delete)
 
 export { router as packageRoutes }

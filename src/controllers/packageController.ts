@@ -20,10 +20,10 @@ class PackageController {
   })
 
   create = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-    const { PackageName, PackageDescrip, PackagePrice } = req.body
+    const { PackageName, PackageDescrip, PackagePrice, DurationMonths } = req.body
     if (!PackageName) throw createError('PackageName is required', 400, 'VALIDATION_ERROR')
 
-    const created = await packageService.createPackage({ PackageName, PackageDescrip, PackagePrice })
+    const created = await packageService.createPackage({ PackageName, PackageDescrip, PackagePrice, DurationMonths })
     res.status(201).json({ data: created, message: 'Package created successfully' })
   })
 

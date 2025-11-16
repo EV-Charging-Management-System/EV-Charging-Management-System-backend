@@ -1,5 +1,6 @@
 import { getDbPool } from "../config/database"
 import { stationService } from "./stationService"
+import { getDiscountPercent } from "../utils/discount"
 
 export class ChargingSessionService {
   async startSessionStaff(stationId: number, pointId: number, portId: number, licensePlate: string, batteryPercentage: number): Promise<any> {
@@ -152,7 +153,7 @@ export class ChargingSessionService {
       const now = new Date(Date.now() + 7 * 60 * 60 * 1000)
       const checkoutTime = now.toISOString().slice(0, 19).replace("T", " ")
 
-      // 1) Load session first to get CheckinTime, TotalTime, PortId, PointId
+  
       const sessionRes = await pool
         .request()
         .input("SessionId", sessionId)
@@ -162,69 +163,21 @@ export class ChargingSessionService {
       }
       const sessionRow = sessionRes.recordset[0]
 
-      // 2) Update checkout and status
+    
       await pool
         .request()
         .input("SessionId", sessionId)
         .input("CheckoutTime", checkoutTime)
         .query("UPDATE [ChargingSession] SET CheckoutTime = @CheckoutTime, ChargingStatus = 'COMPLETED', Status = 0 WHERE SessionId = @SessionId")
 
-      // 3) Load port data
-      const portRes = await pool
-        .request()
-        .input("PortId", sessionRow.PortId)
-        .query(`SELECT PortTypeOfKwh, PortTypePrice FROM [ChargingPort] WHERE PortId = @PortId`)
-      const portRow = portRes.recordset[0]
-
-      // 4) Compute pricing and penalty safely
-      const checkinDate = new Date(sessionRow.CheckinTime)
-      const checkoutDate = new Date(checkoutTime)
-      const plannedMinutes = Math.max(0, Math.ceil(Number(sessionRow.TotalTime || 0)))
-      const actualMinutes = Math.max(0, Math.ceil((checkoutDate.getTime() - checkinDate.getTime()) / (60 * 1000)))
-
-      const plannedEnd = new Date(checkinDate.getTime() + plannedMinutes * 60 * 1000)
-      const graceEnd = new Date(plannedEnd.getTime() + 10 * 60 * 1000) // 10 minutes grace
-
-      const rateKwh = Number(portRow?.PortTypeOfKwh || 0)
-      const ratePrice = Number(portRow?.PortTypePrice || 0)
-
-      let sessionPrice = 0
-      let penaltyFee = 0
-
-      if (checkoutDate > graceEnd) {
-        // Overtime beyond grace -> penalty, base price is planned minutes
-        const overtimeMs = checkoutDate.getTime() - graceEnd.getTime()
-        const penaltyMinutes = Math.max(0, Math.ceil(overtimeMs / (60 * 1000)))
-        penaltyFee = penaltyMinutes * 3000
-        sessionPrice = plannedMinutes * rateKwh * ratePrice
-      } else if (checkoutDate < plannedEnd) {
-        // Early finish -> pay by actual usage
-        sessionPrice = actualMinutes * rateKwh * ratePrice
-      } else {
-        // On time (within grace) -> planned minutes
-        sessionPrice = plannedMinutes * rateKwh * ratePrice
-      }
-
-      // 5) Persist price/penalty in one go
-      await pool
-        .request()
-        .input("SessionId", sessionId)
-        .input("PenaltyFee", penaltyFee)
-        .input("TotalPrice", sessionPrice)
-        .query(`
-          UPDATE [ChargingSession]
-          SET PenaltyFee = @PenaltyFee, SessionPrice = @TotalPrice
-          WHERE SessionId = @SessionId
-        `)
-
-      // 6) Free the port and update point status
+  
       await pool
         .request()
         .input("PortId", sessionRow.PortId)
         .input("Status", "AVAILABLE")
         .query(`UPDATE [ChargingPort] SET [PortStatus] = @Status WHERE PortId = @PortId`)
 
-      // Ensure we await station service update if it's async
+     
       await stationService.updatePointStatus(sessionRow.PointId, "AVAILABLE")
 
       return { message: "Session ended successfully", checkoutTime }
@@ -354,9 +307,28 @@ export class ChargingSessionService {
   async generateInvoiceService(sessionId: number, userId: number): Promise<any> {
     const pool = await getDbPool()
     try {
-      const company = await pool.request().input("UserId", userId).query(`SELECT CompanyId FROM [User] WHERE UserId = @UserId`)
-      const session = await pool.request().input("SessionId", sessionId).query(`SELECT * FROM [ChargingSession] WHERE SessionId = @SessionId`)
-      const amount = Number(session.recordset[0]?.SessionPrice || 0) + Number(session.recordset[0]?.PenaltyFee || 0);
+      const company = await pool.request().input("UserId", userId).query(`SELECT CompanyId, IsPremium FROM [User] WHERE UserId = @UserId`)
+      const session = await pool.request().input("SessionId", sessionId).query(`SELECT SessionPrice, PenaltyFee FROM [ChargingSession] WHERE SessionId = @SessionId`)
+
+      // Compute base amount from session price or fallback to computed price
+      let baseAmount = Number(session.recordset[0]?.SessionPrice || 0)
+      if (!baseAmount) {
+        try {
+          const computed = await this.calculateSessionPrice(sessionId, 0)
+          baseAmount = Number(computed || 0)
+        } catch {
+          baseAmount = 0
+        }
+      }
+
+      // Apply configured discount
+      const isPremium = Boolean(company.recordset[0]?.IsPremium)
+      const percent = isPremium ? getDiscountPercent("Premium") : getDiscountPercent("Guest")
+      if (percent > 0) {
+        baseAmount = baseAmount * (1 - percent / 100)
+      }
+
+      const amount = baseAmount + Number(session.recordset[0]?.PenaltyFee || 0)
       // Check existing invoice for session
       const existing = await pool.request().input("SessionId", sessionId).query(`SELECT TOP 1 InvoiceId FROM [Invoice] WHERE SessionId = @SessionId ORDER BY InvoiceId DESC`);
       if (existing.recordset.length > 0) {
@@ -376,7 +348,7 @@ export class ChargingSessionService {
           .input("SessionId", sessionId)
           .input("CompanyId", company.recordset[0]?.CompanyId || null)
           .input("Amount", amount)
-          .input("Status", "PENDING")
+          .input("Status", "Pending")
           .query(`INSERT INTO [Invoice] (UserId, SessionId, CompanyId, TotalAmount, PaidStatus) VALUES (@UserId, @SessionId, @CompanyId, @Amount, @Status)`);
         return true;
       }
@@ -402,12 +374,10 @@ export class ChargingSessionService {
           baseAmount = 0;
         }
       }
-      // Check if user is premium for discount
+      // Check if user is premium for discount using config
       let discountPercent = 0;
       const userRes = await pool.request().input("UserId", userId).query("SELECT IsPremium FROM [User] WHERE UserId = @UserId");
-      if (userRes.recordset[0]?.IsPremium) {
-        discountPercent = 20;
-      }
+      discountPercent = userRes.recordset[0]?.IsPremium ? getDiscountPercent("Premium") : getDiscountPercent("Guest");
       if (discountPercent > 0) {
         baseAmount = baseAmount * (1 - discountPercent / 100);
       }
@@ -455,21 +425,20 @@ export class ChargingSessionService {
           baseAmount = 0;
         }
       }
-      // For guest, check if any premium user is associated via Booking
-      let discountPercent = 0;
-      let guestUserId: number | undefined = undefined;
+      // Guest discount: apply Premium if linked user is premium, otherwise Guest config
+      let discountPercent = getDiscountPercent("Guest");
       try {
         const bookingRes = await pool.request().input("SessionId", sessionId).query("SELECT b.UserId FROM [ChargingSession] cs JOIN [Booking] b ON cs.BookingId = b.BookingId WHERE cs.SessionId = @SessionId");
-        guestUserId = bookingRes.recordset[0]?.UserId;
+        const guestUserId: number | undefined = bookingRes.recordset[0]?.UserId;
+        if (guestUserId) {
+          try {
+            const userRes = await pool.request().input("UserId", guestUserId).query("SELECT IsPremium FROM [User] WHERE UserId = @UserId");
+            if (userRes.recordset[0]?.IsPremium) {
+              discountPercent = getDiscountPercent("Premium");
+            }
+          } catch {}
+        }
       } catch {}
-      if (guestUserId) {
-        try {
-          const userRes = await pool.request().input("UserId", guestUserId).query("SELECT IsPremium FROM [User] WHERE UserId = @UserId");
-          if (userRes.recordset[0]?.IsPremium) {
-            discountPercent = 20;
-          }
-        } catch {}
-      }
       if (discountPercent > 0) {
         baseAmount = baseAmount * (1 - discountPercent / 100);
       }

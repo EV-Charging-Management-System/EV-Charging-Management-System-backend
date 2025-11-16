@@ -114,10 +114,20 @@ class SubscriptionController {
       throw createError("Không thể tạo Subscription — kiểm tra subscriptionService.createSubscription()", 500);
     }
 
-  // 🧩 2️⃣ Sinh mã giao dịch + link VNPay
+    // 🧩 2️⃣ Lấy giá từ Package để tính amount
+    const pool = await getDbPool();
+    const pkgRes = await pool
+      .request()
+      .input("PackageId", Int, PackageId)
+      .query(`SELECT PackagePrice FROM [Package] WHERE PackageId = @PackageId`);
+    const packagePriceRaw = pkgRes.recordset[0]?.PackagePrice;
+    if (packagePriceRaw === undefined || packagePriceRaw === null) {
+      throw createError("Package not found or missing PackagePrice", 400, "VALIDATION_ERROR");
+    }
+    
+    const amount = Math.max(0, Math.floor(Number(packagePriceRaw)));
     const txnRef = `SUB_${created.SubscriptionId}_${userId}_${Date.now()}`;
     const orderInfo = `Thanh toán gói Premium #${created.SubscriptionId}`;
-    const amount = 299000; // 💰 giá cố định
     const ipAddr = (req.headers["x-forwarded-for"] as string) || req.ip || "127.0.0.1";
 
     const vnpUrl = buildVnpUrl({
@@ -125,7 +135,6 @@ class SubscriptionController {
       orderInfo,
       txnRef,
       ipAddr: ipAddr.replace("::ffff:", ""),
-      
       returnUrl: process.env.VNP_RETURN_API_URL || "http://localhost:5000/api/vnpay/return",
     });
 
@@ -139,6 +148,7 @@ class SubscriptionController {
         SubscriptionId: created.SubscriptionId,
         TxnRef: txnRef,
         vnpUrl,
+        amount,
       },
     });
   });

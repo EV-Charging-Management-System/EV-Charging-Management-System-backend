@@ -22,19 +22,20 @@ class PackageService {
     }
   }
 
-  async createPackage(data: { PackageName: string; PackageDescrip?: string; PackagePrice?: number }): Promise<any> {
+  async createPackage(data: { PackageName: string; PackageDescrip?: string; PackagePrice?: number; DurationMonths?: number | null }): Promise<any> {
     const pool = await getDbPool()
     try {
-      const { PackageName, PackageDescrip = null, PackagePrice = 0 } = data
+      const { PackageName, PackageDescrip = null, PackagePrice = 0, DurationMonths = null } = data
       const result = await pool
         .request()
         .input('PackageName', NVarChar(100), PackageName)
         .input('PackageDescrip', NVarChar(200), PackageDescrip)
         .input('PackagePrice', Float, PackagePrice)
+        .input('DurationMonths', Int, DurationMonths)
         .query(`
-          INSERT INTO [Package] (PackageName, PackageDescrip, PackagePrice)
+          INSERT INTO [Package] (PackageName, PackageDescrip, PackagePrice, DurationMonths)
           OUTPUT INSERTED.*
-          VALUES (@PackageName, @PackageDescrip, @PackagePrice)
+          VALUES (@PackageName, @PackageDescrip, @PackagePrice, @DurationMonths)
         `)
       return result.recordset[0]
     } catch (error) {
@@ -42,7 +43,7 @@ class PackageService {
     }
   }
 
-  async updatePackage(id: number, data: { PackageName?: string; PackageDescrip?: string; PackagePrice?: number }): Promise<any> {
+  async updatePackage(id: number, data: { PackageName?: string; PackageDescrip?: string; PackagePrice?: number; DurationMonths?: number | null }): Promise<any> {
     const pool = await getDbPool()
     try {
       const existing = await this.getPackageById(id)
@@ -51,6 +52,7 @@ class PackageService {
       const PackageName = data.PackageName ?? existing.PackageName
       const PackageDescrip = data.PackageDescrip ?? existing.PackageDescrip
       const PackagePrice = data.PackagePrice ?? existing.PackagePrice
+      const DurationMonths = data.DurationMonths ?? existing.DurationMonths ?? null
 
       const result = await pool
         .request()
@@ -58,9 +60,10 @@ class PackageService {
         .input('PackageName', NVarChar(100), PackageName)
         .input('PackageDescrip', NVarChar(200), PackageDescrip)
         .input('PackagePrice', Float, PackagePrice)
+        .input('DurationMonths', Int, DurationMonths)
         .query(`
           UPDATE [Package]
-          SET PackageName = @PackageName, PackageDescrip = @PackageDescrip, PackagePrice = @PackagePrice
+          SET PackageName = @PackageName, PackageDescrip = @PackageDescrip, PackagePrice = @PackagePrice, DurationMonths = @DurationMonths
           OUTPUT INSERTED.*
           WHERE PackageId = @PackageId
         `)
