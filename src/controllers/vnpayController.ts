@@ -51,7 +51,7 @@ class VnpayController {
           .request()
           .input("UserId", Int, userId)
           .query(`SELECT u.CompanyId FROM [User] u WHERE u.UserId = @UserId`);
-        let companyId: number | null = userRow.recordset[0]?.CompanyId ?? null;
+        const companyId: number | null = userRow.recordset[0]?.CompanyId ?? null;
 
         const startDate = new Date();
         const startMonth = `${startDate.getMonth() + 1}/${startDate.getFullYear()}`;
