@@ -29,4 +29,7 @@ router.get("/session/:companyId", authenticate, businessController.getCompanySes
 // 💰 Tổng quan payments của user theo biển số trong công ty
 router.get("/payments/summary-by-plate", authenticate, businessController.getPaymentsSummaryByPlate);
 
+// 📄 Danh sách toàn bộ Invoice của công ty
+router.get("/invoices/:companyId", authenticate, businessController.getCompanyInvoices);
+
 export { router as businessRoutes };
