@@ -228,6 +228,26 @@ export class AdminController {
       next(error);
     }
   }
+  async createStation(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { stationName, address, stationStatus, stationDescrip, chargingPointTotal } = req.body;
+      if (!stationName || !address || stationStatus === undefined || !stationDescrip || chargingPointTotal === undefined) {
+        res.status(400).json({ message: "All fields are required" });
+        return;
+      }
+      const newStation = await adminService.createStation(
+        stationName,
+        address,
+        stationStatus,
+        stationDescrip,
+        chargingPointTotal
+      );
+      res.status(201).json({ success: true, data: newStation, message: "Station created successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+
   async deleteStationById(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { stationId } = req.body

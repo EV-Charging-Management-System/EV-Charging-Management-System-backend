@@ -312,6 +312,30 @@ export class AdminService {
       throw new Error("Error fetching staff users");
     }
   }
+  async createStation(stationName: string, address: string, stationStatus: "ACTIVE" | "MAINTENANCE" | "FULL", stationDescrip: string | null, chargingPointTotal: number
+): Promise<any> {
+  
+  const pool = await getDbPool();
+  try {
+    const result = await pool.request()
+      .input("StationName", stationName)
+      .input("Address", address)
+      .input("StationStatus", stationStatus)
+      .input("StationDescrip", stationDescrip)
+      .input("ChargingPointTotal", chargingPointTotal)
+      .query(`
+        INSERT INTO [Station] (StationName, Address, StationStatus, StationDescrip, ChargingPointTotal)
+        VALUES (@StationName, @Address, @StationStatus, @StationDescrip, @ChargingPointTotal);
+
+        SELECT @@IDENTITY AS StationId;
+      `);
+
+    return result.recordset[0];
+  } catch (error) {
+    throw new Error("Error creating station: " + error);
+  }
+}
+
   async deleteStationById(stationId: number): Promise<void> {
     const pool = await getDbPool()
     try {

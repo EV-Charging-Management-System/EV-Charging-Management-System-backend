@@ -28,7 +28,7 @@ router.get("/getAllStaff", adminController.getAllStaff);
 router.get("/reports/revenue", adminController.getRevenueReport);
 router.get("/reports/usage", adminController.getUsageReport);
 
-
+router.post('/createStation',adminController.createStation)
 router.patch('/deleteStation',adminController.deleteStationById)
 router.post('/createPoint',adminController.createPoint)
 router.put('/updatePoint',adminController.updatePoint)
