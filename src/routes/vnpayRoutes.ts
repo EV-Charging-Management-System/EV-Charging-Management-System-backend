@@ -18,8 +18,7 @@ router.post(
 // New: create payment link specifically for an invoice
 router.post(
   "/create-invoice",
-  authenticate,
-  authorize(["ADMIN", "STAFF", "EVDRIVER", "BUSINESS"]),
+  // Public access: no authentication/authorization so anyone can pay an invoice
   vnpayController.createInvoicePaymentUrl,
 );
 

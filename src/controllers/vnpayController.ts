@@ -117,12 +117,12 @@ class VnpayController {
   // 🆕 1b. Create VNPay URL for a specific invoice
   createInvoicePaymentUrl = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { userId: bodyUserId, invoiceId: rawInvoiceId, orderInfo } = req.body;
-      const userId = (bodyUserId !== undefined && !isNaN(Number(bodyUserId))) ? Number(bodyUserId) : req.user?.userId;
+      const { invoiceId: rawInvoiceId, orderInfo } = req.body;
       const invoiceId = rawInvoiceId !== undefined && !isNaN(Number(rawInvoiceId)) ? Number(rawInvoiceId) : undefined;
 
-      if (!userId || invoiceId === undefined) {
-        res.status(400).json({ success: false, message: "Thiếu userId hoặc invoiceId" });
+      // Public payment: only need invoiceId
+      if (invoiceId === undefined) {
+        res.status(400).json({ success: false, message: "Thiếu invoiceId" });
         return;
       }
       const pool = await getDbPool();
@@ -135,10 +135,6 @@ class VnpayController {
         res.status(404).json({ success: false, message: "Invoice không tồn tại" });
         return;
       }
-      if (Number(invRow.UserId) !== Number(userId)) {
-        res.status(403).json({ success: false, message: "Invoice không thuộc user" });
-        return;
-      }
       if (String(invRow.PaidStatus).toLowerCase() === "paid") {
         res.status(409).json({ success: false, message: "Invoice đã thanh toán" });
         return;
@@ -146,7 +142,9 @@ class VnpayController {
 
       const amount = Number(invRow.TotalAmount || 0);
       const info = orderInfo || `Thanh toán hóa đơn #${invoiceId}`;
-      const txnRef = `INV_${invoiceId}_${userId}_${Date.now()}`;
+      // Use owner userId from invoice for tracking, even if requester is public
+      const ownerUserId = Number(invRow.UserId) || 0;
+      const txnRef = `INV_${invoiceId}_${ownerUserId}_${Date.now()}`;
 
       const vnpUrl = buildVnpUrl({
         amount,
