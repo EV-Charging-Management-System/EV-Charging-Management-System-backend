@@ -72,24 +72,21 @@ export class BusinessService {
         i.TotalAmount,
         i.PaidStatus,
         i.CreatedAt,
-        CASE WHEN i.CompanyId = @CompanyId THEN 1 ELSE 0 END AS InvoiceCompanyMatch,
-        CASE WHEN EXISTS (SELECT 1 FROM [User] u WHERE u.UserId = i.UserId AND u.CompanyId = @CompanyId) THEN 1 ELSE 0 END AS UserCompanyMatch,
-        CASE WHEN EXISTS (
-          SELECT 1 
-          FROM [ChargingSession] cs 
-          INNER JOIN [Vehicle] v ON cs.VehicleId = v.VehicleId 
-          WHERE cs.SessionId = i.SessionId AND v.CompanyId = @CompanyId
-        ) THEN 1 ELSE 0 END AS SessionVehicleCompanyMatch,
-        CASE WHEN EXISTS (SELECT 1 FROM [Vehicle] vu WHERE vu.UserId = i.UserId AND vu.CompanyId = @CompanyId) THEN 1 ELSE 0 END AS UserVehicleCompanyMatch
+        u.UserName,
+        v.VehicleName,
+        v.LicensePlate
       FROM [Invoice] i
+      LEFT JOIN [User] u ON u.UserId = i.UserId
+      LEFT JOIN [ChargingSession] cs ON cs.SessionId = i.SessionId
+      LEFT JOIN [Vehicle] v ON v.VehicleId = cs.VehicleId
       WHERE (
         i.CompanyId = @CompanyId
-        OR EXISTS (SELECT 1 FROM [User] u WHERE u.UserId = i.UserId AND u.CompanyId = @CompanyId)
+        OR EXISTS (SELECT 1 FROM [User] u2 WHERE u2.UserId = i.UserId AND u2.CompanyId = @CompanyId)
         OR EXISTS (
           SELECT 1 
-          FROM [ChargingSession] cs 
-          INNER JOIN [Vehicle] v ON cs.VehicleId = v.VehicleId 
-          WHERE cs.SessionId = i.SessionId AND v.CompanyId = @CompanyId
+          FROM [ChargingSession] cs2 
+          INNER JOIN [Vehicle] v2 ON cs2.VehicleId = v2.VehicleId 
+          WHERE cs2.SessionId = i.SessionId AND v2.CompanyId = @CompanyId
         )
         OR EXISTS (SELECT 1 FROM [Vehicle] vu WHERE vu.UserId = i.UserId AND vu.CompanyId = @CompanyId)
       )${statusFilter}
@@ -104,6 +101,9 @@ export class BusinessService {
       totalAmount: Number(x.TotalAmount || 0),
       paidStatus: x.PaidStatus,
       createdAt: x.CreatedAt,
+      userName: x.UserName ?? null,
+      vehicleName: x.VehicleName ?? null,
+      licensePlate: x.LicensePlate ?? null,
     }))
   }
 
