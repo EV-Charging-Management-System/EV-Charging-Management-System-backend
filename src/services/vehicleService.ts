@@ -48,7 +48,7 @@ export class VehicleService {
         .request()
         .input("UserId", userId)
         .query(`
-          SELECT TOP 1 UserId, Role, CompanyId FROM [User] WHERE UserId = @UserId
+          SELECT TOP 1 UserId, RoleName AS Role, CompanyId FROM [User] WHERE UserId = @UserId
         `)
 
       const userInfo = userRow.recordset[0]
@@ -101,7 +101,7 @@ export class VehicleService {
         .request()
         .input("UserId", params.userId)
         .query(`
-          SELECT TOP 1 UserId, Role, CompanyId FROM [User] WHERE UserId = @UserId
+          SELECT TOP 1 UserId, RoleName AS Role, CompanyId FROM [User] WHERE UserId = @UserId
         `)
       const userInfo = userRow.recordset[0]
       const isBusiness = userInfo?.Role === "BUSINESS"
