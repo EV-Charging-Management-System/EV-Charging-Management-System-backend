@@ -796,6 +796,16 @@ export class BusinessController {
           WHERE v.CompanyId = @CompanyId
         `);
       const totalSessions = Number(sessRs.recordset[0]?.TotalSessions || 0);
+      const vehicleRs = await pool
+  .request()
+  .input("CompanyId", Int, cid)
+  .query(`
+    SELECT COUNT(*) AS TotalVehicles
+    FROM [Vehicle]
+    WHERE CompanyId = @CompanyId
+  `);
+const totalVehicles = Number(vehicleRs.recordset[0]?.TotalVehicles || 0);
+
       const totalPenaltyFee = Number(sessRs.recordset[0]?.TotalPenalty || 0);
 
       // Invoices counts for company (all time)
@@ -858,6 +868,7 @@ export class BusinessController {
           companyId: cid,
           companyName,
           totalSessions,
+          totalVehicles,   
           totalInvoices,
           paidInvoices,
           unpaidInvoices,
