@@ -111,6 +111,14 @@ export class VehicleController {
         return
       }
 
+      if (result.status === "attached-company") {
+        res.status(200).json({
+          message: "Vehicle attached to company successfully",
+          vehicle: result.vehicle,
+        })
+        return
+      }
+
       if (result.status === "exists-other-user") {
         res.status(409).json({ message: "Vehicle already exists and owned by another user" })
         return

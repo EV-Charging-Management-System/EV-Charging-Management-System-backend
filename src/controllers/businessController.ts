@@ -220,16 +220,123 @@ export class BusinessController {
         .query(`SELECT TOP 1 * FROM [Vehicle] WHERE LicensePlate = @LicensePlate`);
       const existingVehicle = existingVehicleRs.recordset[0];
       if (existingVehicle) {
-        // If already belongs to a company, block
+        const belongsToOtherUser = existingVehicle.UserId && existingVehicle.UserId !== userId;
+        const isBusiness = user.RoleName === "BUSINESS" && user.CompanyId;
+
+        // BUSINESS can attach vehicle of another user if not yet attached to a company
+        if (isBusiness && belongsToOtherUser && !existingVehicle.CompanyId) {
+          await pool
+            .request()
+            .input("VehicleId", Int, existingVehicle.VehicleId)
+            .input("CompanyId", Int, user.CompanyId)
+            .query(`UPDATE [Vehicle] SET CompanyId = @CompanyId WHERE VehicleId = @VehicleId`);
+
+          // Optionally update name/type/battery if provided (do not overwrite with undefined)
+          await pool
+            .request()
+            .input("VehicleId", Int, existingVehicle.VehicleId)
+            .input("VehicleName", VarChar(100), vehicleName)
+            .input("VehicleType", VarChar(50), vehicleType)
+            .input("Battery", Int, battery ?? existingVehicle.Battery ?? 50)
+            .query(`
+              UPDATE [Vehicle]
+              SET VehicleName = @VehicleName, VehicleType = @VehicleType, Battery = @Battery
+              WHERE VehicleId = @VehicleId
+            `);
+
+          const refreshed = await pool
+            .request()
+            .input("VehicleId", Int, existingVehicle.VehicleId)
+            .query(`SELECT VehicleId, UserId, CompanyId, VehicleName, VehicleType, LicensePlate, Battery FROM [Vehicle] WHERE VehicleId = @VehicleId`);
+          const v = refreshed.recordset[0];
+          res.status(200).json({
+            message: "Vehicle attached to business successfully",
+            vehicleId: v.VehicleId,
+            companyId: v.CompanyId,
+            licensePlate: v.LicensePlate,
+            vehicleName: v.VehicleName,
+            vehicleType: v.VehicleType,
+            battery: v.Battery,
+            attached: true,
+          });
+          return;
+        }
+
+        // BUSINESS attaching own existing vehicle without company yet
+        if (isBusiness && !belongsToOtherUser && !existingVehicle.CompanyId) {
+          await pool
+            .request()
+            .input("VehicleId", Int, existingVehicle.VehicleId)
+            .input("CompanyId", Int, user.CompanyId)
+            .query(`UPDATE [Vehicle] SET CompanyId = @CompanyId WHERE VehicleId = @VehicleId`);
+
+          const refreshed = await pool
+            .request()
+            .input("VehicleId", Int, existingVehicle.VehicleId)
+            .query(`SELECT VehicleId, UserId, CompanyId, VehicleName, VehicleType, LicensePlate, Battery FROM [Vehicle] WHERE VehicleId = @VehicleId`);
+          const v = refreshed.recordset[0];
+          res.status(200).json({
+            message: "Existing vehicle assigned to company successfully",
+            vehicleId: v.VehicleId,
+            companyId: v.CompanyId,
+            licensePlate: v.LicensePlate,
+            vehicleName: v.VehicleName,
+            vehicleType: v.VehicleType,
+            battery: v.Battery,
+            attached: true,
+          });
+          return;
+        }
+
+        // If already belongs to a company (any user), just return info (no error for BUSINESS) else block for non-business
         if (existingVehicle.CompanyId) {
-          res.status(400).json({ error: "Vehicle already belongs to a company" });
+          res.status(200).json({
+            message: "Vehicle already belongs to a company",
+            vehicleId: existingVehicle.VehicleId,
+            companyId: existingVehicle.CompanyId,
+            licensePlate: existingVehicle.LicensePlate,
+            vehicleName: existingVehicle.VehicleName,
+            vehicleType: existingVehicle.VehicleType,
+            battery: existingVehicle.Battery,
+            attached: true,
+          });
           return;
         }
-        // If belongs to another user, block duplicate plate
-        if (existingVehicle.UserId && existingVehicle.UserId !== userId) {
-          res.status(400).json({ error: "Vehicle already belongs to another user" });
-          return;
+
+        if (belongsToOtherUser) {
+          // Non-business users cannot attach another user's vehicle
+            res.status(400).json({ error: "Vehicle already belongs to another user" });
+            return;
         }
+
+        // Same user adding same plate again -> treat as idempotent update
+        await pool
+          .request()
+          .input("VehicleId", Int, existingVehicle.VehicleId)
+          .input("VehicleName", VarChar(100), vehicleName)
+          .input("VehicleType", VarChar(50), vehicleType)
+          .input("Battery", Int, battery ?? existingVehicle.Battery ?? 50)
+          .query(`
+            UPDATE [Vehicle]
+            SET VehicleName = @VehicleName, VehicleType = @VehicleType, Battery = @Battery
+            WHERE VehicleId = @VehicleId
+          `);
+        const updatedSame = await pool
+          .request()
+          .input("VehicleId", Int, existingVehicle.VehicleId)
+          .query(`SELECT VehicleId, UserId, CompanyId, VehicleName, VehicleType, LicensePlate, Battery FROM [Vehicle] WHERE VehicleId = @VehicleId`);
+        const v2 = updatedSame.recordset[0];
+        res.status(200).json({
+          message: "Vehicle already exists - updated details",
+          vehicleId: v2.VehicleId,
+          companyId: v2.CompanyId ?? null,
+          licensePlate: v2.LicensePlate,
+          vehicleName: v2.VehicleName,
+          vehicleType: v2.VehicleType,
+          battery: v2.Battery,
+          attached: false,
+        });
+        return;
       }
 
       if (user.CompanyId && user.RoleName === "BUSINESS") {

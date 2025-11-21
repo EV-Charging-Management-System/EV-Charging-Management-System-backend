@@ -43,20 +43,38 @@ export class VehicleService {
     try {
       const randomBattery = battery || randomInt(20, 100)
 
-      const result = await pool
+      // Load user to determine CompanyId when role = BUSINESS
+      const userRow = await pool
+        .request()
+        .input("UserId", userId)
+        .query(`
+          SELECT TOP 1 UserId, Role, CompanyId FROM [User] WHERE UserId = @UserId
+        `)
+
+      const userInfo = userRow.recordset[0]
+      const companyIdToUse = userInfo && userInfo.Role === "BUSINESS" ? userInfo.CompanyId ?? null : null
+
+      const insert = await pool
         .request()
         .input("UserId", userId)
         .input("VehicleName", vehicleName)
         .input("VehicleType", vehicleType)
         .input("LicensePlate", licensePlate)
         .input("Battery", randomBattery)
+        .input("CompanyId", companyIdToUse)
         .query(`
-          INSERT INTO [Vehicle] (UserId, VehicleName, VehicleType, LicensePlate, Battery)
-          OUTPUT INSERTED.VehicleId
-          VALUES (@UserId, @VehicleName, @VehicleType, @LicensePlate, @Battery)
+          INSERT INTO [Vehicle] (UserId, VehicleName, VehicleType, LicensePlate, Battery, CompanyId)
+          OUTPUT INSERTED.VehicleId, INSERTED.CompanyId
+          VALUES (@UserId, @VehicleName, @VehicleType, @LicensePlate, @Battery, @CompanyId)
         `)
 
-      return { vehicleId: result.recordset[0].VehicleId, vehicleName, licensePlate, battery: randomBattery }
+      return {
+        vehicleId: insert.recordset[0].VehicleId,
+        vehicleName,
+        licensePlate,
+        battery: randomBattery,
+        companyId: insert.recordset[0].CompanyId ?? null,
+      }
     } catch (error) {
       throw new Error("Error adding vehicle: " + error)
     }
@@ -73,10 +91,22 @@ export class VehicleService {
     | { status: "created"; vehicle: any }
     | { status: "updated"; vehicle: any }
     | { status: "exists-other-user"; vehicle?: any }
+    | { status: "attached-company"; vehicle: any }
   > {
     const pool = await getDbPool()
     const plate = params.licensePlate
     try {
+      // Load current user info (role + company)
+      const userRow = await pool
+        .request()
+        .input("UserId", params.userId)
+        .query(`
+          SELECT TOP 1 UserId, Role, CompanyId FROM [User] WHERE UserId = @UserId
+        `)
+      const userInfo = userRow.recordset[0]
+      const isBusiness = userInfo?.Role === "BUSINESS"
+      const businessCompanyId = isBusiness ? userInfo.CompanyId ?? null : null
+
       // Find existing vehicle by plate
       const existing = await pool
         .request()
@@ -88,7 +118,6 @@ export class VehicleService {
       if (!existing.recordset[0]) {
         // Create new vehicle
         const randomBattery = params.battery || randomInt(20, 100)
-
         const insertResult = await pool
           .request()
           .input("UserId", params.userId)
@@ -96,10 +125,11 @@ export class VehicleService {
           .input("VehicleType", params.vehicleType || null)
           .input("LicensePlate", plate)
           .input("Battery", randomBattery)
+          .input("CompanyId", businessCompanyId)
           .query(`
-            INSERT INTO [Vehicle] (UserId, VehicleName, VehicleType, LicensePlate, Battery)
+            INSERT INTO [Vehicle] (UserId, VehicleName, VehicleType, LicensePlate, Battery, CompanyId)
             OUTPUT INSERTED.VehicleId
-            VALUES (@UserId, @VehicleName, @VehicleType, @LicensePlate, @Battery)
+            VALUES (@UserId, @VehicleName, @VehicleType, @LicensePlate, @Battery, @CompanyId)
           `)
 
         const newId = insertResult.recordset[0].VehicleId
@@ -120,6 +150,40 @@ export class VehicleService {
 
       const found = existing.recordset[0]
       if (Number(found.UserId) !== Number(params.userId)) {
+        // Business can attach existing personal vehicle (CompanyId null -> set; otherwise keep)
+        if (isBusiness) {
+          if (!found.CompanyId && businessCompanyId) {
+            await pool
+              .request()
+              .input("VehicleId", found.VehicleId)
+              .input("CompanyId", businessCompanyId)
+              .query(`
+                UPDATE [Vehicle] SET CompanyId = @CompanyId WHERE VehicleId = @VehicleId
+              `)
+            // refresh
+            const refreshed = await pool
+              .request()
+              .input("VehicleId", found.VehicleId)
+              .query(`
+                SELECT v.VehicleId, v.UserId, COALESCE(v.CompanyId, u.CompanyId) AS CompanyId, v.VehicleName, v.VehicleType, v.LicensePlate, v.Battery
+                FROM [Vehicle] v
+                JOIN [User] u ON v.UserId = u.UserId
+                WHERE v.VehicleId = @VehicleId
+              `)
+            return { status: "attached-company", vehicle: mapVehicle(refreshed.recordset[0]) }
+          }
+          // Already has a company or cannot attach -> just return existing without error
+          const existingInfo = await pool
+            .request()
+            .input("VehicleId", found.VehicleId)
+            .query(`
+              SELECT v.VehicleId, v.UserId, COALESCE(v.CompanyId, u.CompanyId) AS CompanyId, v.VehicleName, v.VehicleType, v.LicensePlate, v.Battery
+              FROM [Vehicle] v
+              JOIN [User] u ON v.UserId = u.UserId
+              WHERE v.VehicleId = @VehicleId
+            `)
+          return { status: "attached-company", vehicle: mapVehicle(existingInfo.recordset[0]) }
+        }
         return { status: "exists-other-user" }
       }
 
