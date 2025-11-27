@@ -176,18 +176,21 @@ async getBookingByStationId(stationId: number): Promise<any[]> {
       throw new Error("Error checking out booking")
     }
   }
-  async getPortSlotBookings(portId: number): Promise<any[]> {
+  async getPortSlotBookings(portId: number,  date: string): Promise<any[]> {
     const pool = await getDbPool();
     try {
       const result = await pool
         .request()
         .input("PortId", portId)
-        .query(`
-          SELECT SlotId
-          FROM Booking
-          WHERE PortId = @portId AND Status = 'ACTIVE'
-          ORDER BY SlotId
-        `);
+      .input("BookingDate", date) // date ở dạng 'YYYY-MM-DD'
+      .query(`
+        SELECT SlotId
+        FROM Booking
+        WHERE PortId = @PortId
+          AND CONVERT(date, BookingDate) = @BookingDate
+          AND Status = 'ACTIVE'
+        ORDER BY SlotId
+      `);
       return result.recordset;
     }
     catch (error) {

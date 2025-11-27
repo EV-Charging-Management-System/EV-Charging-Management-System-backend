@@ -123,8 +123,9 @@ export class BookingController {
   }
   async getPortSlotBookings(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
+      const date = new Date().toISOString().split('T')[0]; // Lấy ngày hiện tại ở định dạng 'YYYY-MM-DD'
       const { portId } = req.params;
-      const bookings = await bookingService.getPortSlotBookings(Number(portId));
+      const bookings = await bookingService.getPortSlotBookings(Number(portId), date);
       res.status(200).json({ success: true, data: bookings });
     } catch (error) {
       next(error);
