@@ -5,10 +5,10 @@ import { bookingService } from "../services/bookingService"
 export class BookingController {
   async createBooking(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { stationId, pointId, portId, vehicleId, startTime, depositAmount,qr } = req.body
+      const { stationId, pointId, portId, vehicleId, slotId, depositAmount, qr } = req.body
       const userId = req.user?.userId
 
-      if (!userId || !stationId || !pointId || !portId || !vehicleId || !startTime || depositAmount === undefined || !qr) {
+      if (!userId || !stationId || !pointId || !portId || !vehicleId || !slotId || depositAmount === undefined || !qr) {
         res.status(400).json({ message: "Missing required fields" })
         return
       }
@@ -22,7 +22,7 @@ export class BookingController {
         portId,
         vehicleId,
         bookingDate,
-        startTime,
+        slotId,
         depositAmount,
         qr
       })
@@ -121,6 +121,16 @@ export class BookingController {
       next(error)
     }
   }
+  async getPortSlotBookings(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { portId } = req.params;
+      const bookings = await bookingService.getPortSlotBookings(Number(portId));
+      res.status(200).json({ success: true, data: bookings });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
+
 
 export const bookingController = new BookingController()

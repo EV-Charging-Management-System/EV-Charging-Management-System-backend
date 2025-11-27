@@ -8,7 +8,7 @@ interface CreateBookingParams {
   pointId: number
   portId: number
   bookingDate?: string | Date
-  startTime?: string | Date
+  slotId: number
   depositAmount: number
    qr?: string
 }
@@ -25,7 +25,11 @@ export class BookingService {
 
     // ✅ Cho phép user nhập BookingDate, nếu không nhập thì lấy hiện tại
     const bookingDate = params.bookingDate ? new Date(params.bookingDate) : new Date()
-    const startTime = params.startTime ? new Date(params.startTime) : new Date()
+    const slotId = params.slotId;
+
+    if (slotId < 1 || slotId > 8) {
+      throw new Error("SlotId must be between 1 and 8");
+    }
 
     const result = await pool
       .request()
@@ -35,16 +39,16 @@ export class BookingService {
       .input("PortId", params.portId)
       .input("VehicleId", params.vehicleId)
       .input("BookingDate", bookingDate)
-      .input("StartTime", startTime)
+      .input("SlotId", slotId)
       .input("Status", status)
       .input("QR", qr)
       .input("DepositAmount", params.depositAmount || 0)
       .query(`
         INSERT INTO [Booking] 
-          (UserId, StationId, PointId, PortId, VehicleId, BookingDate, StartTime, Status, QR, DepositAmount)
+          (UserId, StationId, PointId, PortId, VehicleId, BookingDate, SlotId, Status, QR, DepositAmount)
         OUTPUT INSERTED.BookingId
         VALUES 
-          (@UserId, @StationId, @PointId, @PortId, @VehicleId, @BookingDate, @StartTime, @Status, @QR, @DepositAmount)
+          (@UserId, @StationId, @PointId, @PortId, @VehicleId, @BookingDate, @SlotId, @Status, @QR, @DepositAmount)
       `)
 
     return {
@@ -170,6 +174,25 @@ async getBookingByStationId(stationId: number): Promise<any[]> {
         `)
     } catch (error) {
       throw new Error("Error checking out booking")
+    }
+  }
+  async getPortSlotBookings(portId: number): Promise<any[]> {
+    const pool = await getDbPool();
+    try {
+      const result = await pool
+        .request()
+        .input("PortId", portId)
+        .query(`
+          SELECT SlotId, COUNT(*) AS BookingCount
+          FROM Booking
+          WHERE PortId = ${portId} AND Status = 'ACTIVE'
+          GROUP BY SlotId
+          ORDER BY SlotId
+        `);
+      return result.recordset;
+    }
+    catch (error) {
+      throw new Error("Error fetching port slot bookings");
     }
   }
 }

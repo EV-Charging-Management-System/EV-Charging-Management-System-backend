@@ -12,4 +12,5 @@ router.delete("/:id/cancel", authenticate, authorize(["EVDRIVER", "STAFF", "BUSI
 router.patch("/:id/checkout", authenticate, authorize(["EVDRIVER", "STAFF", "BUSINESS"]), bookingController.checkoutBooking)
 router.get("/available/slots", authenticate, authorize(["EVDRIVER", "STAFF", "BUSINESS"]), bookingController.getAvailableSlots)
 
+router.get("/port/:portId/slots", authenticate, authorize(["EVDRIVER", "STAFF", "BUSINESS"]), bookingController.getPortSlotBookings);
 export { router as bookingRoutes }
