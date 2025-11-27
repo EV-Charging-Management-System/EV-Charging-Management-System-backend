@@ -188,7 +188,6 @@ async getBookingByStationId(stationId: number): Promise<any[]> {
         FROM Booking
         WHERE PortId = @PortId
           AND CONVERT(date, BookingDate) = @BookingDate
-          AND Status = 'ACTIVE'
         ORDER BY SlotId
       `);
       return result.recordset;
