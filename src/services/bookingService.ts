@@ -183,10 +183,9 @@ async getBookingByStationId(stationId: number): Promise<any[]> {
         .request()
         .input("PortId", portId)
         .query(`
-          SELECT SlotId, COUNT(*) AS BookingCount
+          SELECT SlotId
           FROM Booking
-          WHERE PortId = ${portId} AND Status = 'ACTIVE'
-          GROUP BY SlotId
+          WHERE PortId = @portId AND Status = 'ACTIVE'
           ORDER BY SlotId
         `);
       return result.recordset;
